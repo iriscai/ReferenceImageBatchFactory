@@ -1,4 +1,4 @@
-* text=auto
+* -text
 
 # Preserve the verified historical source bytes on every platform.
 *.py -text

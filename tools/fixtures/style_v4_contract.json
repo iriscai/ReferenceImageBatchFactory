@@ -1,0 +1,65 @@
+{
+  "source": "妻子问：“水烧开了吗？”丈夫点了点头。",
+  "plan": {
+    "scene": "室内，夫妻交谈。",
+    "cast": [
+      "妻子：丈夫的妻子",
+      "丈夫：妻子的丈夫"
+    ],
+    "panels": [
+      {
+        "beat": "起问",
+        "action": "妻子看向丈夫。",
+        "narration": "",
+        "dialogue": [
+          [
+            "妻子",
+            "水烧开了吗？"
+          ]
+        ],
+        "screens": []
+      },
+      {
+        "beat": "反应",
+        "action": "丈夫点头。",
+        "narration": "丈夫点了点头。",
+        "dialogue": [],
+        "screens": []
+      },
+      {
+        "beat": "反应",
+        "action": "丈夫点头。",
+        "narration": "丈夫点了点头。",
+        "dialogue": [],
+        "screens": []
+      },
+      {
+        "beat": "反应",
+        "action": "丈夫点头。",
+        "narration": "丈夫点了点头。",
+        "dialogue": [],
+        "screens": []
+      },
+      {
+        "beat": "反应",
+        "action": "丈夫点头。",
+        "narration": "丈夫点了点头。",
+        "dialogue": [],
+        "screens": []
+      },
+      {
+        "beat": "反应",
+        "action": "丈夫点头。",
+        "narration": "丈夫点了点头。",
+        "dialogue": [],
+        "screens": []
+      }
+    ]
+  },
+  "style": {
+    "name": "契约测试画风",
+    "full_prompt": "【人物】细长鼻、短线眼。\n【线条与媒介】轻细干笔。\n【色彩范围】白底，少量浅绿。\n【气泡与旁白】对白细椭圆，旁白淡黄短底条。"
+  },
+  "v4_prompt_sha256": "9c312a9162970131a2615e4a0a2ba071129130ea2d88512bb3236f2c3d7b0e6b",
+  "v4_planning_request_sha256": "7f44a16a3c55569009c7a012301859be4e62dd23ecb22814a6d8d16ac49912c3"
+}

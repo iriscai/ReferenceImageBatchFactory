@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 SUPPORTED_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+GUTTER_SPLIT_VERSION = "white-gutter-center-v2"
 
 
 class ImageSplitError(RuntimeError):
@@ -308,97 +309,101 @@ def smart_boxes(image) -> list[tuple[int, int, int, int]]:
     return boxes
 
 
-def gutter_boxes(image, rows: int, columns: int) -> list[tuple[int, int, int, int]]:
-    """Split on the white gaps between panels, so unequal cells stay intact.
+def detect_gutter_layout(image, rows: int, columns: int, expected_width: float = 16):
+    """Find near-16px white strips and cut through their centers.
 
-    A gutter row is almost entirely white, including both outer edges. Rows
-    inside a framed panel keep dark borders, so they are not treated as gaps.
-    Returns an empty list when the expected gaps cannot be found.
+    A few white scanlines inside a panel are not a divider. Require a strip
+    of plausible width, near-white continuity and nearby frame evidence.
+    Small JPEG marks may interrupt a strip; they must occupy under 1% of it.
+    No panel pixels or black frames are trimmed away after detection.
     """
-    gray = image.convert("L")
-    width, height = gray.size
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise ImageSplitError("白条切图需要 numpy，请先安装项目依赖。") from exc
+    width, height = image.size
     if width < 40 or height < 40 or rows < 1 or columns < 1:
-        return []
-    pixels = gray.tobytes()
-    white_limit = 236
+        return None
+    if expected_width <= 0:
+        raise ImageSplitError("白条宽度必须为正数。")
+    pixels = np.asarray(image.convert("RGB")).min(axis=2)
 
-    def row_is_gap(y: int) -> bool:
-        offset = y * width
-        if pixels[offset] < white_limit or pixels[offset + width - 1] < white_limit:
-            return False
-        white = sum(value >= white_limit for value in pixels[offset:offset + width])
-        return white / width >= 0.96
-
-    def column_is_gap(x: int) -> bool:
-        white = 0
-        for y in range(height):
-            if pixels[y * width + x] >= white_limit:
-                white += 1
-        if white / height < 0.92:
-            return False
-        return pixels[x] >= white_limit and pixels[(height - 1) * width + x] >= white_limit
-
-    def choose_gaps(flags: list[bool], length: int, parts: int) -> list[tuple[int, int]]:
-        if parts <= 1:
+    def choose(axis: int, length: int, parts: int, scale: float):
+        if parts == 1:
             return []
-        min_width = 2
-        clusters = profile_clusters([1.0 if flag else 0.0 for flag in flags], 1.0, min_width)
-        edge_margin = max(8, round(length * 0.04))
-        max_width = max(12, round(length * 0.12))
-        usable = []
-        for start, end in clusters:
-            center = (start + end) / 2
-            if center < edge_margin or center > length - edge_margin:
-                continue
-            if end - start > max_width:
-                continue
-            usable.append((start, end))
-        chosen = []
-        used = set()
-        window = length * 0.22
-        for index in range(1, parts):
-            target = index * length / parts
-            best = None
-            best_distance = window
-            for cluster_index, (start, end) in enumerate(usable):
-                if cluster_index in used:
+        # A page-wide outside frame may cross an otherwise valid white strip.
+        cross = pixels.shape[axis]
+        edge = max(2, round(cross * 0.008))
+        sample = pixels[edge:-edge, :] if axis == 0 else pixels[:, edge:-edge]
+        cross = sample.shape[axis]
+        white = ((sample < 225).sum(axis=axis) <= max(1, cross // 1000)) & (sample.mean(axis=axis) >= 240)
+        dark = (sample < 190).mean(axis=axis)
+        changes = np.diff(np.r_[False, white, False].astype(np.int8))
+        runs = list(zip(np.flatnonzero(changes == 1).tolist(), np.flatnonzero(changes == -1).tolist()))
+        nominal = expected_width * scale
+        minimum = max(4, round(nominal * 7 / 16))
+        maximum = max(12, round(nominal * 2))
+        interruption = max(2, round(nominal / 4))
+        bands = set(runs)
+        for index, (start, end) in enumerate(runs):
+            right = end
+            for following, last in runs[index + 1:]:
+                if following - right > interruption or last - start > maximum:
+                    break
+                right = last
+                bands.add((start, right))
+        selected = []
+        for division in range(1, parts):
+            target = length * division / parts
+            window = length / parts * 0.22
+            candidates = []
+            for start, end in bands:
+                band_width = end - start
+                center = (start + end) / 2
+                if not minimum <= band_width <= maximum or abs(center - target) > window:
                     continue
-                distance = abs(((start + end) / 2) - target)
-                if distance < best_distance:
-                    best = cluster_index
-                    best_distance = distance
-            if best is None:
-                return []
-            used.add(best)
-            chosen.append(usable[best])
-        chosen.sort()
-        return chosen
+                radius = max(3, round(nominal / 2))
+                before = float(np.max(dark[max(0, start - radius):start], initial=0))
+                after = float(np.max(dark[end:min(length, end + radius)], initial=0))
+                # Prefer two frame edges; a broken hand-drawn edge may have
+                # only one strong side, provided the entire band stays white.
+                if min(before, after) < 0.30 and max(before, after) < 0.70:
+                    continue
+                strip = sample[:, start:end] if axis == 0 else sample[start:end, :]
+                ink_ratio = float((strip < 225).mean())
+                if ink_ratio > 0.01:
+                    continue
+                score = (2 * min(before, after) + 0.5 * (before + after)
+                         - 0.3 * abs(band_width - nominal) / nominal
+                         - 0.3 * abs(center - target) / window)
+                candidates.append((score, start, end, before, after, ink_ratio))
+            if not candidates:
+                return None
+            score, start, end, before, after, ink_ratio = max(candidates)
+            selected.append({"start": start, "end": end, "center": (start + end) // 2,
+                             "width": end - start, "frame_before": before,
+                             "frame_after": after, "ink_ratio": ink_ratio})
+        return selected
 
-    horizontal = choose_gaps([row_is_gap(y) for y in range(height)], height, rows)
-    vertical = choose_gaps([column_is_gap(x) for x in range(width)], width, columns)
-    if len(horizontal) != max(0, rows - 1) or len(vertical) != max(0, columns - 1):
-        return []
-
-    y_edges = [0]
-    for start, end in horizontal:
-        y_edges.extend((start, end))
-    y_edges.append(height)
-    x_edges = [0]
-    for start, end in vertical:
-        x_edges.extend((start, end))
-    x_edges.append(width)
-
+    vertical = choose(0, width, columns, width / 1024)
+    horizontal = choose(1, height, rows, height / 1536)
+    if vertical is None or horizontal is None:
+        return None
+    x_edges = [0] + [band["center"] for band in vertical] + [width]
+    y_edges = [0] + [band["center"] for band in horizontal] + [height]
     boxes = []
-    for top, bottom in zip(y_edges[0::2], y_edges[1::2]):
-        if bottom - top < 20:
-            return []
-        for left, right in zip(x_edges[0::2], x_edges[1::2]):
-            if right - left < 20:
-                return []
+    for top, bottom in zip(y_edges, y_edges[1:]):
+        for left, right in zip(x_edges, x_edges[1:]):
+            if right - left < 20 or bottom - top < 20:
+                return None
             boxes.append((left, top, right, bottom))
-    if len(boxes) != rows * columns:
-        return []
-    return boxes
+    return {"version": GUTTER_SPLIT_VERSION, "nominal_gutter_px": expected_width,
+            "vertical_gutters": vertical, "horizontal_gutters": horizontal, "boxes": boxes}
+
+
+def gutter_boxes(image, rows: int, columns: int, expected_width: float = 16) -> list[tuple[int, int, int, int]]:
+    layout = detect_gutter_layout(image, rows, columns, expected_width)
+    return layout["boxes"] if layout else []
 
 
 def should_fallback_to_fixed(width: int, height: int, boxes: list[tuple[int, int, int, int]], rows: int, columns: int) -> bool:
@@ -430,6 +435,7 @@ def split_image_file(
     overwrite: bool,
     split_mode: str = "fixed",
     border_trim: int = 4,
+    expected_gutter_width: float = 16,
 ) -> tuple[int, str]:
     try:
         from PIL import Image, ImageOps
@@ -442,10 +448,12 @@ def split_image_file(
         used_mode = split_mode
         boxes = []
         if split_mode == "gutter":
-            boxes = gutter_boxes(image, rows, columns)
+            boxes = gutter_boxes(image, rows, columns, expected_gutter_width)
             if len(boxes) != rows * columns:
-                used_mode = "fixed"
-                boxes = fixed_boxes(width, height, rows, columns)
+                raise ImageSplitError(
+                    f"未可靠识别到{columns - 1}条纵向、{rows - 1}条横向约{expected_gutter_width:g}px白条。"
+                    "已保留整图，不回退等分裁切；请检查格间白条是否完整。"
+                )
         elif split_mode == "smart":
             boxes = smart_boxes(image)
             if should_fallback_to_fixed(width, height, boxes, rows, columns):
@@ -500,7 +508,8 @@ def split_directory(
         logger("没有找到可切割图片。")
         return SplitSummary(working_root, 0, 0, 0, 0, 0)
 
-    mode_text = "智能分镜" if config.split_mode == "smart" else f"固定网格 {config.columns} 列 x {config.rows} 行"
+    mode_text = ("智能分镜" if config.split_mode == "smart" else "16px白条中心切图" if config.split_mode == "gutter"
+                 else f"固定网格 {config.columns} 列 x {config.rows} 行")
     logger(f"开始切割：{len(sources)} 张图片，模式：{mode_text}，处理目录：{working_root}")
     success_count = 0
     skipped_count = 0

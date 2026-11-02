@@ -1,3 +1,10 @@
+from six_grid_style_prompt import generate_style_prompt as generate_six_grid_style_prompt
+from comic_copy_layout import split_comic_copy
+from comic_story_plan import build_comic_plan, format_comic_plan
+from comic_prompt_planner import (MODE_LOCAL, MODE_SEMANTIC, SEMANTIC_VERSION, PANEL_COPY_RULE,
+                                 generate_semantic_plan, prompt_mode, render_semantic_prompt)
+from comic_prompt_batch import read_story_table, export_story_prompts
+from strong_reference_prompt import NARRATION_REFERENCE_RULE
 import base64
 import concurrent.futures
 import contextlib
@@ -3890,6 +3897,7 @@ class PicFactoryGUI:
         self.account_generation_defaults.setdefault("image_size", "768x1024")
         self.account_generation_defaults.setdefault("max_file_size_mb", 1)
         self.account_generation_defaults.setdefault("skip_success", True)
+        self.account_generation_defaults.setdefault("comic_prompt_mode", "semantic")
         self.account_generation_defaults.setdefault("selected_account_ids", [])
         self.remove_ai_defaults = self.state.setdefault("remove_ai_config", {})
         self.remove_ai_defaults.setdefault("input_dir", "")
@@ -6291,7 +6299,7 @@ class PicFactoryGUI:
                     {"key": "note", "label": "备注", "type": "text", "height": 3},
                     {"key": "updated_at", "label": "更新时间", "type": "entry", "readonly": True, "list_width": 150},
                     {"key": "operation", "label": "操作", "default": "编辑 / 删除", "readonly": True, "list_width": 110},
-                ], "公众号配置与发布参数。生图方式决定这条账号走哪条流程：“参考图生图”仍是现有的文章、分镜和长生图提示词，并上传所选参考图；“六宫格参考图生图”不跑文章和分镜，把标题库正文直接放进项目13的三段式生图提示词，同样上传参考图，宫格必须是四宫格或六宫格；“参考图连续生图”按文章画面连续生成多张，正文原句按顺序分到每一张；参考图是单幅，每一张都上传这张参考图锁定画风，从第 2 张起再附上上一张成图承接人物和场景；宫格为单幅时逐张出图；“画风生图”使用所选画风（在“画风管理”中维护，按画风提示词生图）；“六宫格画风生图”使用所选画风详情与正文直接组成提示词，生成一张1024×1536的2列3行整图后自动切成6张，不调用文章、留言和分镜模型，也不上传参考图；该方式固定六宫格且自动切图，不受宫格与是否切图字段影响，所选画风详情须包含六宫格版式要求；人物特征用于固定账号人物形象，只填写该账号长期稳定的外貌、发型、五官、体型、服装、配饰和固定颜色；场景、动作、构图和光线由分镜规则负责。去AI按账号单独控制。宫格决定作品版式：单幅=每个画面一张图；四宫格/六宫格=整个作品画成一张宫格图（文章节点会被要求恰好产出 4/6 个画面，仅搞笑漫画模板生效），勾选“是否切图”后自动切成单格图片。「参考图连续生图」参考图是单幅，从第 2 张起同时上传参考图和上一张成图。图片精修=是时，成图后按“图片精修”工作区保存的默认配置自动精修。分组/标签在“分组管理”“标签管理”中维护后供筛选与选择；列表默认只展示启用账号。", prepare_record=self.prepare_account_record)
+                ], "公众号配置与发布参数。生图方式决定这条账号走哪条流程：“参考图生图”仍是现有的文章、分镜和长生图提示词，并上传所选参考图；“六宫格参考图生图”不改写整篇文章，按“宫格Prompt”选择语义编排或本地原文分格后组成逐格生图提示词，同样上传参考图，宫格必须是四宫格或六宫格；“参考图连续生图”按文章画面连续生成多张，正文原句按顺序分到每一张；参考图是单幅，每一张都上传这张参考图锁定画风，从第 2 张起再附上上一张成图承接人物和场景；宫格为单幅时逐张出图；“画风生图”使用所选画风（在“画风管理”中维护，按画风提示词生图）；“六宫格画风生图”使用所选画风详情与正文直接组成提示词，生成一张1024×1536的2列3行整图后自动切成6张，不调用文章、留言和分镜模型，也不上传参考图；该方式固定六宫格且自动切图，不受宫格与是否切图字段影响，所选画风详情须包含六宫格版式要求；人物特征用于固定账号人物形象，只填写该账号长期稳定的外貌、发型、五官、体型、服装、配饰和固定颜色；场景、动作、构图和光线由分镜规则负责。去AI按账号单独控制。宫格决定作品版式：单幅=每个画面一张图；四宫格/六宫格=整个作品画成一张宫格图（文章节点会被要求恰好产出 4/6 个画面，仅搞笑漫画模板生效），勾选“是否切图”后自动切成单格图片。「参考图连续生图」参考图是单幅，从第 2 张起同时上传参考图和上一张成图。图片精修=是时，成图后按“图片精修”工作区保存的默认配置自动精修。分组/标签在“分组管理”“标签管理”中维护后供筛选与选择；列表默认只展示启用账号。", prepare_record=self.prepare_account_record)
             elif label == "分组管理":
                 self.render_collection_list_page(tabs[label], "账号分组", "account_groups", [
                     {"key": "uuid", "label": "UUID", "type": "entry", "default": lambda: self.record_uuid(), "required": True, "readonly": True, "list_width": 260},
@@ -12025,6 +12033,7 @@ class PicFactoryGUI:
             ("account_generation_category_var", "category"),
             ("account_generation_article_prompt_var", "article_prompt"),
             ("account_generation_storyboard_rule_var", "storyboard_prompt_rule"),
+            ("account_generation_comic_prompt_mode_var", "comic_prompt_mode"),
             ("account_generation_title_count_var", "title_count"),
             ("account_generation_workers_var", "max_workers"),
             ("account_generation_retry_var", "group_retry_count"),
@@ -12167,7 +12176,7 @@ class PicFactoryGUI:
 
     def render_account_generation_workspace(self):
         ttk.Label(self.main, text="账号生图", style="Title.TLabel").pack(anchor="w", pady=8)
-        ttk.Label(self.main, text="参考图生图：标题库正文 -> 文章 -> 分镜 -> 长生图提示词。六宫格参考图生图：标题库正文直接进入三段式提示词，不跑文章和分镜。参考图连续生图：正文原句按顺序分到每一张；每张都上传单幅参考图，从第 2 张起再附上上一张成图。六宫格画风生图：画风详情＋画面段子内容＋正文，生成一张六宫格图并自动切成6张，不走文章、留言和分镜。画风生图按原流程执行。", style="Muted.TLabel").pack(anchor="w", pady=(0, 10))
+        ttk.Label(self.main, text="参考图生图：标题库正文 -> 文章 -> 分镜 -> 长生图提示词。六宫格参考图生图：正文先编排为逐格漫画Prompt，再生图；可选择语义编排或本地原文分格。参考图连续生图：正文原句按顺序分到每一张；每张都上传单幅参考图，从第 2 张起再附上上一张成图。六宫格画风生图：画风详情＋画面段子内容＋正文，生成一张六宫格图并自动切成6张，不走文章、留言和分镜。画风生图按原流程执行。", style="Muted.TLabel").pack(anchor="w", pady=(0, 10))
         box = ttk.LabelFrame(self.main, text="生成配置", padding=10)
         box.pack(fill="x", pady=(0, 10))
         accounts = self.account_generation_accounts()
@@ -12185,7 +12194,10 @@ class PicFactoryGUI:
         self.account_generation_image_size_var = tk.StringVar(value=str(self.account_generation_defaults.get("image_size", "768x1024")))
         self.account_generation_max_file_size_var = tk.StringVar(value=str(self.account_generation_defaults.get("max_file_size_mb", 1)))
         self.account_generation_skip_success_var = tk.BooleanVar(value=bool(self.account_generation_defaults.get("skip_success", True)))
-        fields = [("分镜Prompt规则", self.account_generation_storyboard_rule_var, rule_values, True)]
+        self.account_generation_comic_prompt_mode_var = tk.StringVar(
+            value=MODE_LOCAL if prompt_mode(self.account_generation_defaults) == "local" else MODE_SEMANTIC)
+        fields = [("分镜Prompt规则", self.account_generation_storyboard_rule_var, rule_values, True),
+                  ("宫格Prompt", self.account_generation_comic_prompt_mode_var, [MODE_SEMANTIC, MODE_LOCAL], True)]
         for row, (label, variable, values, readonly) in enumerate(fields):
             ttk.Label(box, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=4)
             combo = ttk.Combobox(box, textvariable=variable, values=values, state="readonly" if readonly else "normal", width=38)
@@ -12212,6 +12224,8 @@ class PicFactoryGUI:
             entry.grid(row=row, column=col + 1, sticky="w", pady=4)
             entry.bind("<FocusOut>", lambda _event: self.save_account_generation_config())
         self.toggle_checkbutton(box, "跳过已成功标题", self.account_generation_skip_success_var, self.save_account_generation_config).grid(row=4, column=0, columnspan=2, sticky="w", pady=5)
+        ttk.Label(box, text="语义编排需要文本API，会整理漫画对白；本地分格保留原文。仅影响六宫格参考图生图。",
+                  style="Muted.TLabel", wraplength=460).grid(row=4, column=2, columnspan=3, sticky="w", pady=5)
         for column in (1, 3):
             box.columnconfigure(column, weight=1)
 
@@ -12281,6 +12295,9 @@ class PicFactoryGUI:
         self.account_generation_start_button.pack(side="left")
         self.account_generation_retry_button = ttk.Button(actions, text="重试失败任务", command=lambda: self.start_account_generation(retry_failed=True))
         self.account_generation_retry_button.pack(side="left", padx=(8, 0))
+        self.account_generation_prompt_export_button = ttk.Button(
+            actions, text="从表格生成Prompt", command=self.start_comic_prompt_export)
+        self.account_generation_prompt_export_button.pack(side="left", padx=(8, 0))
         self.account_generation_stop_button = ttk.Button(actions, text="停止", command=self.stop_account_generation, style="Stop.TButton", state="disabled")
         self.account_generation_stop_button.pack(side="left", padx=8)
         ttk.Button(actions, text="扫描已选标题", command=self.scan_account_generation_titles).pack(side="left")
@@ -13189,7 +13206,7 @@ class PicFactoryGUI:
             limit -= 8
 
     def execute_project13_account_title(self, httpx, text_api: dict, image_api: dict, account: dict, title_record: dict, config: dict, binding: dict, stop_event) -> dict:
-        """六宫格参考图生图：正文直接进三段式 prompt，不调用文章和分镜模型。"""
+        """六宫格参考图：语义编排/本地分格 -> 校验 -> Prompt -> 整图。"""
         started_at = time.time()
         work_id = str(title_record.get("_work_uuid", "") or "").strip() or self.record_uuid()
         title = str(title_record.get("title", "")).strip()
@@ -13217,11 +13234,37 @@ class PicFactoryGUI:
         text_key_start = self.next_text_api_key_start(len(text_api["keys"]))
         image_key_start = self.next_image_api_key_start(len(image_api["keys"]))
         try:
+            semantic = prompt_mode(config) == "semantic"
+            if semantic:
+                if not text_api.get("keys"):
+                    raise RuntimeError("语义编排需要文本API Key；请配置text_api_keys，或将宫格Prompt改为本地原文分格。")
+                copy_plan = self.plan_project13_semantically(httpx, text_api, article, int(grid["cells"]),
+                                                           text_key_start, stop_event, title_log_label)
+                planned_prompt = render_semantic_prompt(copy_plan)
+                for scene, panel in zip(scenes, copy_plan["panels"]):
+                    scene.update({"source_slice": "\n".join(panel.get("source_quotes", [])),
+                                  "prompt": panel["action"], "narration": [panel["narration"]] if panel["narration"] else [],
+                                  "dialogues": [{"speaker": who, "text": text, "thought": False} for who, text in panel["dialogue"]],
+                                  "speech_bubble_count": len(panel["dialogue"]), "screens": panel.get("screens", []),
+                                  "image_prompt": planned_prompt})
+            else:
+                copy_plan = build_comic_plan(article, int(grid["cells"]))
+                planned_prompt = self.build_project13_image_prompt(article, grid)
+                for scene, panel in zip(scenes, copy_plan["panels"]):
+                    scene.update({"source_slice": panel["source_text"], "prompt": panel["action"],
+                                  "narration": panel["narration"], "dialogues": panel["dialogues"],
+                                  "copy_segments": panel["segments"], "speech_bubble_count": panel["speech_bubble_count"],
+                                  "thought_bubble_count": panel["thought_bubble_count"], "image_prompt": planned_prompt})
+            work.update({"copy_plan": copy_plan, "planned_image_prompt": planned_prompt,
+                         "prompt_source": "text_model" if semantic else "local_rules"})
+            self.account_generation_log(f"{title_log_label} 分格执行单：{copy_plan['version']}，已绑定旁白、对白归属和场景。")
+            for warning in copy_plan.get("warnings", []):
+                self.account_generation_log(f"{title_log_label} 文案待复核（第{warning['panel']}格）：{warning['message']}")
             comment = ""
             if self.account_save_comment_enabled(account):
                 text_context = {}
                 try:
-                    self.account_generation_log(f"{title_log_label}（{account_label}）六宫格参考图生图：生成留言。正文直接作为文章内容，不调用文章和分镜模型。")
+                    self.account_generation_log(f"{title_log_label}（{account_label}）六宫格参考图生图：生成留言。正文直接作为文章内容，使用已校验的宫格Prompt，不改写整篇文章。")
                     comment_category = str(title_record.get("category", "") or account.get("title_category", "")).strip()
                     comment_template = self.account_generation_comment_template(comment_category)
                     raw_comment = self.call_account_generation_text(
@@ -13234,7 +13277,7 @@ class PicFactoryGUI:
                 finally:
                     self.close_account_generation_text_context(text_context)
             else:
-                self.account_generation_log(f"{title_log_label}（{account_label}）六宫格参考图生图：正文直接作为【文章内容】，不调用文章和分镜模型。")
+                self.account_generation_log(f"{title_log_label}（{account_label}）六宫格参考图生图：正文直接作为【文章内容】，使用已校验的宫格Prompt，不改写整篇文章。")
             final_article = article
             if comment:
                 final_article += "\n\n" + comment
@@ -13256,13 +13299,14 @@ class PicFactoryGUI:
                         "stop_event": stop_event, "base_prompt": "", "generate_copy": False, "copy_text": article,
                         "source_body": article, "group_key_start": image_key_start, "folder": str(output_dir),
                         "project13": True, "suppress_headline": True, "grid": grid,
+                        "comic_prompt_plan": copy_plan if semantic else None,
                         "reference_name": binding_name, "reference_image_path": binding_image_path,
                         "reference_meta": {"width": int(binding.get("width") or 0), "height": int(binding.get("height") or 0), "size": PROJECT13_IMAGE_SIZE, "configured_size": PROJECT13_IMAGE_SIZE},
                         "image_post_process": {"size": PROJECT13_IMAGE_SIZE, "margin_px": 0},
                         "remove_ai": remove_ai_enabled, "log_func": self.account_generation_log,
                     }
                     group["items"].append({"row_values": {"画面内容": article, "文案": article}, "save_path": str(grid_path), "sheet": title, "row_no": 1})
-                    self.account_generation_log(f"开始生图（{grid['label']}宫格图 1 张，13三段式），参考图「{binding_name}」，尺寸 {PROJECT13_IMAGE_SIZE}。")
+                    self.account_generation_log(f"开始生图（{grid['label']}宫格图 1 张，已校验Prompt），参考图「{binding_name}」，尺寸 {PROJECT13_IMAGE_SIZE}。")
                     result = self.execute_image_title_group_task(httpx, image_api, group, PROJECT13_IMAGE_SIZE, float(config.get("max_file_size_mb", 1) or 1), 0)
                     if not result.get("success"):
                         raise RuntimeError(result.get("error", "标题图片生成失败。"))
@@ -13301,8 +13345,8 @@ class PicFactoryGUI:
             self.account_generation_log(f"标题任务结束：{title_log_label}（{account_label}）{work['status']}，原因：{exc}")
             return work
 
-    def execute_six_grid_style_account_title(self, httpx, image_api: dict, account: dict, title_record: dict, config: dict, binding: dict, stop_event) -> dict:
-        """画风详情和正文直通图片模型，一张六宫格整图自动切成六张。"""
+    def execute_six_grid_style_account_title(self, httpx, text_api: dict, image_api: dict, account: dict, title_record: dict, config: dict, binding: dict, stop_event) -> dict:
+        """先语义编排六格，再用已验证的画风Prompt生图并切成六张。"""
         started_at = time.time()
         title = str(title_record.get("title", "")).strip()
         title_log_label = str(title_record.get("log_label", "") or "").strip() or (title[:12] + "…")
@@ -13334,7 +13378,32 @@ class PicFactoryGUI:
                 raise RuntimeError(f"公众号「{account_label}」的画风「{binding_name}」详情为空。")
             if self.account_generation_stop_requested or stop_event.is_set():
                 raise RuntimeError("已请求停止。")
-            self.account_generation_log(f"{title_log_label}（{account_label}）六宫格画风生图：画风详情与正文直接拼接，不调用文章、留言和分镜模型。")
+            if not text_api.get("keys"):
+                raise RuntimeError("六宫格画风生图需要文本API进行六格语义编排，请配置text_api_keys。")
+            self.account_generation_log(f"{title_log_label}（{account_label}）六宫格画风生图：先编排六格脚本，再生成画风Prompt；不调用文章和留言模型。")
+            context = {}
+            text_key_start = self.next_text_api_key_start(len(text_api["keys"]))
+            try:
+                planned = generate_six_grid_style_prompt(
+                    {"name": binding_name, "full_prompt": style_detail}, source_body,
+                    lambda request: self.call_account_generation_text(
+                        httpx, text_api, request, text_key_start, stop_event,
+                        conversation_context=context),
+                    max_attempts=2,
+                    on_attempt=lambda attempt: self.account_generation_log(
+                        f"{title_log_label} 六宫格画风语义编排：第{attempt}/2次。"),
+                )
+            finally:
+                self.close_account_generation_text_context(context)
+            if self.account_generation_stop_requested or stop_event.is_set():
+                raise RuntimeError("已请求停止。")
+            work["comic_prompt_plan"] = planned["plan"]
+            work["prompt_version"] = planned["version"]
+            for scene, panel in zip(scenes, planned["plan"]["panels"]):
+                scene.update({"prompt": panel["action"], "narration": [panel["narration"]] if panel["narration"] else [],
+                              "dialogues": [{"speaker": who, "text": text, "thought": False} for who, text in panel["dialogue"]],
+                              "screens": panel["screens"], "speech_bubble_count": len(panel["dialogue"]),
+                              "image_prompt": planned["prompt"]})
             final_article = source_body
             article_tag_text = str(account.get("article_tag", "") or "").strip()
             if article_tag_text:
@@ -13350,6 +13419,7 @@ class PicFactoryGUI:
                 "stop_event": stop_event, "base_prompt": "", "generate_copy": False,
                 "source_body": source_body, "group_key_start": self.next_image_api_key_start(len(image_api["keys"])),
                 "folder": str(output_dir), "six_grid_style": True, "grid": grid,
+                "six_grid_style_prompt": planned["prompt"], "six_grid_style_source": source_body,
                 "style_name": binding_name, "style_detail": style_detail,
                 "image_post_process": {"size": PROJECT13_IMAGE_SIZE, "margin_px": 0},
                 "remove_ai": remove_ai_enabled, "log_func": self.account_generation_log,
@@ -13386,7 +13456,7 @@ class PicFactoryGUI:
 
     def execute_account_generation_title(self, httpx, text_api: dict, image_api: dict, account: dict, title_record: dict, config: dict, article_template: dict, storyboard_rule: dict, binding: dict, stop_event) -> dict:
         if self.account_generation_mode(account) == GENERATION_MODE_GRID_STYLE or str(binding.get("mode", "")) == "six_grid_style":
-            return self.execute_six_grid_style_account_title(httpx, image_api, account, title_record, config, binding, stop_event)
+            return self.execute_six_grid_style_account_title(httpx, text_api, image_api, account, title_record, config, binding, stop_event)
         if self.account_generation_mode(account) == GENERATION_MODE_13 or str(binding.get("mode", "")) == "project13":
             return self.execute_project13_account_title(httpx, text_api, image_api, account, title_record, config, binding, stop_event)
         started_at = time.time()
@@ -13804,6 +13874,7 @@ class PicFactoryGUI:
             for widget, state in (
                 (getattr(self, "account_generation_start_button", None), "disabled" if running else "normal"),
                 (getattr(self, "account_generation_retry_button", None), "disabled" if running else "normal"),
+                (getattr(self, "account_generation_prompt_export_button", None), "disabled" if running else "normal"),
                 (getattr(self, "account_generation_stop_button", None), "normal" if running and not self.account_generation_stop_requested else "disabled"),
             ):
                 if widget is not None:
@@ -14102,7 +14173,7 @@ class PicFactoryGUI:
                 self.account_generation_log("没有待生成标题：当前分类为空，或标题已经被其他账号/历史作品使用。")
                 self.set_account_generation_summary("没有待生成标题：当前分类为空，或标题已经被其他账号/历史作品使用。")
                 return
-            if all(self.account_generation_mode(account) == GENERATION_MODE_GRID_STYLE for account in accounts):
+            if not self.account_generation_requires_text(accounts, config):
                 text_api, image_api = self.load_account_generation_api_config(str(config.get("api_config", "")), require_text=False)
             else:
                 text_api, image_api = self.load_account_generation_api_config(str(config.get("api_config", "")))
@@ -14756,229 +14827,72 @@ class PicFactoryGUI:
                 lines.append({"speaker": "", "text": visible, "thought": False})
         return lines or [{"speaker": "", "text": text, "thought": False}]
 
-    def _split_keeping_delimiters(self, text: str, delimiters: str) -> list[str]:
-        """Split on every delimiter, including ones inside quotation marks. Delimiters stay with the left piece."""
-        chunks: list[str] = []
-        buf = ""
-        for char in text:
-            buf += char
-            if char in delimiters:
-                chunks.append(buf)
-                buf = ""
-        if buf:
-            chunks.append(buf)
-        return [chunk for chunk in chunks if chunk] or [text]
 
-    def _break_all(self, chunks: list[str], delimiters: str, outside_quotes: bool) -> list[str]:
-        """Split every chunk on the delimiters. One pass is enough; the splitter walks the whole piece."""
-        output: list[str] = []
-        for chunk in chunks:
-            parts = self._split_outside_quotes(chunk, delimiters) if outside_quotes else self._split_keeping_delimiters(chunk, delimiters)
-            if len(parts) >= 2 and "".join(parts) == chunk:
-                output.extend(parts)
-            else:
-                output.append(chunk)
-        return output
 
-    def _soft_midpoint(self, piece: str) -> int:
-        """Cut near the middle, preferring punctuation so a word is not split when a nearby break exists."""
-        mid = max(1, len(piece) // 2)
-        best = None
-        best_dist = 10**9
-        for index, char in enumerate(piece):
-            if char not in "，,、。！？!?；;：:”\n":
-                continue
-            cut = index + 1
-            if cut <= 0 or cut >= len(piece):
-                continue
-            dist = abs(cut - mid)
-            if dist < best_dist:
-                best = cut
-                best_dist = dist
-        if best is not None and best_dist <= max(2, len(piece) // 3):
-            return best
-        return mid
 
-    def _pack_contiguous_chunks(self, chunks: list[str], count: int) -> list[str]:
-        """Pack ordered chunks into ``count`` contiguous frames with close character counts."""
-        if len(chunks) <= count:
-            return list(chunks) + [""] * (count - len(chunks))
-        prefix = [0]
-        for chunk in chunks:
-            prefix.append(prefix[-1] + len(chunk))
-        total = prefix[-1] or 1
-        cuts = [0]
-        for step in range(1, count):
-            target = total * step / count
-            low = cuts[-1] + 1
-            high = len(chunks) - (count - step)
-            best = min(range(low, high + 1), key=lambda idx: (abs(prefix[idx] - target), idx))
-            cuts.append(best)
-        cuts.append(len(chunks))
-        return ["".join(chunks[cuts[index]:cuts[index + 1]]) for index in range(count)]
 
-    def _merge_short_chunks(self, chunks: list[str], limit: int = 2) -> list[str]:
-        """Glue a one- or two-character tail, often a closing quote, onto the previous clause."""
-        if not chunks:
-            return chunks
-        merged = [chunks[0]]
-        for chunk in chunks[1:]:
-            if len(chunk.strip()) <= limit:
-                merged[-1] += chunk
-            else:
-                merged.append(chunk)
-        if len(merged) >= 2 and len(merged[0].strip()) <= limit:
-            merged[1] = merged[0] + merged[1]
-            merged = merged[1:]
-        return merged
 
-    def _snap_cut(self, piece: str, target: int) -> int:
-        """Pick a cut nearest ``target`` that leaves both sides non-empty, preferring punctuation."""
-        if len(piece) <= 1:
-            return 1
-        target = max(1, min(len(piece) - 1, target))
-        best = target
-        best_dist = 10**9
-        window = max(2, len(piece) // 3)
-        for index, char in enumerate(piece):
-            if char not in "，,、。！？!?；;：:”\n":
-                continue
-            cut = index + 1
-            if cut <= 0 or cut >= len(piece):
-                continue
-            dist = abs(cut - target)
-            if dist < best_dist and dist <= window:
-                best = cut
-                best_dist = dist
-        return best
 
-    def _rebalance_copy_frames(self, frames: list[str]) -> list[str]:
-        """Pull text from the heavier neighbor into a short cell, so no cell is left with a few characters."""
-        frames = list(frames)
-        count = len(frames)
-        for _ in range(count * 6):
-            lens = [len(item) for item in frames]
-            if not lens or min(lens) == 0:
-                break
-            spread = max(lens) - min(lens)
-            if spread <= 12:
-                break
-            short_i = min(range(count), key=lambda i: (lens[i], i))
-            neighbors = [index for index in (short_i - 1, short_i + 1) if 0 <= index < count]
-            if not neighbors:
-                break
-            donor = max(neighbors, key=lambda i: lens[i])
-            if lens[donor] <= lens[short_i] + 1:
-                break
-            need = max(1, (lens[donor] - lens[short_i]) // 2)
-            need = min(need, lens[donor] - 1)
-            piece = frames[donor]
-            raw_cut = need if donor > short_i else len(piece) - need
-            cut = self._snap_cut(piece, raw_cut)
-            if donor > short_i:
-                moved, keep = piece[:cut], piece[cut:]
-                new_short = frames[short_i] + moved
-            else:
-                keep, moved = piece[:cut], piece[cut:]
-                new_short = moved + frames[short_i]
-            new_donor = keep
-            if len(new_short) <= lens[short_i] or not new_donor:
-                cut = raw_cut
-                if donor > short_i:
-                    moved, keep = piece[:cut], piece[cut:]
-                    new_short = frames[short_i] + moved
-                else:
-                    keep, moved = piece[:cut], piece[cut:]
-                    new_short = moved + frames[short_i]
-                new_donor = keep
-            if len(new_short) <= lens[short_i] or not new_donor:
-                break
-            compared = [len(new_short), len(new_donor)]
-            compared.extend(len(frames[i]) for i in range(count) if i not in (short_i, donor))
-            if min(compared) < min(lens) or max(compared) - min(compared) >= spread:
-                break
-            frames[short_i] = new_short
-            frames[donor] = new_donor
-        return frames
 
     def project13_copy_slices(self, body: str, count: int) -> list[str]:
-        """把原文切成与宫格数相同的连续片段。只给「六宫格参考图生图」分格文案使用。"""
-        count = max(1, int(count))
-        text = str(body or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-        if not text:
-            return []
-        chunks = self._split_outside_quotes(text, "。！？!?；;\n")
-        chunks = self._break_all(chunks, "，,、", outside_quotes=True)
-        chunks = self._break_all(chunks, "，,、。！？!?；;", outside_quotes=False)
-        chunks = self._merge_short_chunks(chunks)
-        while len(chunks) < count:
-            index = max(range(len(chunks)), key=lambda item: len(chunks[item]))
-            piece = chunks[index]
-            if len(piece) <= 1:
-                break
-            mid = self._soft_midpoint(piece)
-            chunks = chunks[:index] + [piece[:mid], piece[mid:]] + chunks[index + 1:]
-        frames = self._rebalance_copy_frames(self._pack_contiguous_chunks(chunks, count)[:count])
-        if "".join(frames) != text:
-            raise RuntimeError("六宫格参考图生图分格后正文与原文不一致。")
-        return frames
+        """Protect dialogue and reaction beats; joining the panels restores the body."""
+        return split_comic_copy(body, count)
 
     def build_project13_image_prompt(self, article: str, grid: dict | None) -> str:
-        """项目 13 的三段式生图 prompt。只给「六宫格参考图生图」账号使用。
-
-        正文会先切成与宫格数相同的连续片段。生图模型否则常把对白堆进前几格，
-        后几格只剩画面。
-        """
+        """项目 13：逐格绑定文字容器、说话人、动作和故事场景。"""
         grid = grid or {}
         is_four = str(grid.get("label") or "") == "四宫格"
         label = "四宫格（2列2行）" if is_four else "六宫格（2列3行）"
         count = 4 if is_four else 6
-        body = str(article or "").strip()
+        body = str(article or "").replace("\r\n", "\n").replace("\r", "\n").strip()
         positions = (
             ("第1行左", "第1行右", "第2行左", "第2行右")
             if is_four
             else ("第1行左", "第1行右", "第2行左", "第2行右", "第3行左", "第3行右")
         )
-        slices = self.project13_copy_slices(body, count)
-        if slices:
-            assignment_lines = [
-                f"第{index}格（{place}）只写这一段原文：{piece}"
-                for index, (place, piece) in enumerate(zip(positions, slices), start=1)
-            ]
-            assignment_block = "【各格文案】\n" + "\n".join(assignment_lines) + "\n\n"
-        else:
-            assignment_block = ""
-        later = "第3格和第4格（下面一行）" if is_four else "第4格、第5格和第6格（含最下面一行的两格）"
+        plan = build_comic_plan(body, count)
+        assignment_block = format_comic_plan(plan, positions)
         return (
             f"【文章内容】\n{body}\n\n"
+            "以上原文仅用于理解故事与核对，不能整段照印或整段放进气泡。"
+            "只有执行单中标注为旁白框、对白气泡或思考气泡的容器正文可以印在画面上。\n\n"
             f"【参考图提示词】\n{PROJECT13_REFERENCE_PROMPT}\n\n"
             "【文案要求】\n"
-            f"全部{count}个画面都要携带适量文案，阅读顺序是从左到右、从上到下。一格都不能是纯画面。\n"
-            "气泡里的字必须是分好的原文，按格子顺序逐格出现。不要压缩，不要概括，不要改成更短的口号或小标题。"
-            "称呼、数字、转折和吐槽都保留。不得把后面几格的句子提前堆进前面几格，也不得把前面的句子再抄一遍来填后面的格子。"
-            "某一段若从半句开始，或引号没有在本格闭合，仍按这一段原文逐字写入，不要把别格的字补进来。\n"
-            f"禁止文案只挤在前半部分。{later}同样要有对白气泡，字数和前面几格接近，不能只有人物、动作或背景。\n"
-            "参考图只决定画风、线条、配色、人物画法和气泡样式，不要照抄参考图的文字数量和文字位置。"
-            "参考图后几格没有字，不代表这次后几格可以不写。把原文分进每一格不属于额外文字；不要另编原文里没有的句子。\n\n"
+            f"共{count}格，阅读顺序从左到右、从上到下；每格内部按文字容器编号阅读。\n"
+            "不要压缩、概括、另编或重复原文。完整对白不得跨格截断。"
+            "动作、叙述和间接转述放旁白框；说话人引导语是旁白，不能连同对白塞进气泡。\n"
+            "严格按各格容器数量、类型、所属人物和气泡指向绘制。旁白框不得带指向人物的尾巴。"
+            "不同人物的台词不得合并在同一个气泡里；本格普通对白气泡数量为0时，不画任何普通对白气泡。\n"
+            "允许各格字数明显不同。反应格保留停顿，并用简短辅助旁白交代表情或动作，不从相邻格搬字补满，不强加人物台词。"
+            f"{PANEL_COPY_RULE}\n{NARRATION_REFERENCE_RULE}\n"
+            "角色名、性别、动作指令、场景依据、容器编号与数量等均为执行说明，不得印到画面上。\n\n"
             f"{assignment_block}"
             f"【宫格布局要求】\n必须生成{label}，共{count}个画面，画面等大、完整可裁切，"
-            "保持白色背景，各格必须严格等大，横竖分割都落在画布的等分位置，格与格之间只留一条均匀白缝。"
+            "格内底色、媒介与画风完全遵循参考图；白色仅用于格间分隔，不得覆盖参考图的背景底色。各格等大，格间均匀白缝。"
             "主体与文字距离画布边界至少100px。"
-            f"输出前确认第1格到第{count}格每一格都能读到【各格文案】里的原文，缺任何一格的文案都算失败。"
+            "输出前逐格检查：旁白与气泡分离、说话人及气泡指向正确、零对白格没有对白气泡、"
+            "文字没有遗漏或重复，人物身份与故事场景没有套用参考图中的无关内容。"
             "只输出一张1024x1536竖版整图，不要输出正方形画布。"
         )
 
     def build_six_grid_style_image_prompt(self, style_detail: str, body: str) -> str:
-        return f"{str(style_detail or '').strip()}\n画面段子内容：\n{str(body or '').strip()}"
+        raise RuntimeError("六宫格画风生图必须先完成六格语义编排，禁止回退为画风与正文直接拼接。")
 
     def build_image_batch_prompt(self, base_prompt: str, row_values: dict, group_context: dict | None = None) -> str:
         group_context = group_context or {}
         if group_context.get("six_grid_style"):
-            return self.build_six_grid_style_image_prompt(
-                group_context.get("style_detail", ""),
-                group_context.get("source_body") or row_values.get("画面内容") or "",
-            )
+            source = str(group_context.get("source_body") or row_values.get("画面内容") or "").strip()
+            planned_prompt = str(group_context.get("six_grid_style_prompt") or "").strip()
+            if not planned_prompt or source != str(group_context.get("six_grid_style_source") or "").strip():
+                raise RuntimeError("六宫格画风Prompt缺失或与当前正文不匹配，禁止调用图片接口。")
+            return planned_prompt
         if group_context.get("project13"):
+            semantic_plan = group_context.get("comic_prompt_plan")
+            if semantic_plan is not None:
+                source = str(group_context.get("source_body") or row_values.get("画面内容") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+                if semantic_plan.get("source_body") != source:
+                    raise RuntimeError("语义分镜与当前正文不匹配，禁止复用其他标题的Prompt。")
+                return render_semantic_prompt(semantic_plan)
             return self.build_project13_image_prompt(
                 str(group_context.get("source_body") or row_values.get("画面内容") or "").strip(),
                 group_context.get("grid") or {},
@@ -15912,7 +15826,10 @@ class PicFactoryGUI:
                             "grid": group.get("grid") or None,
                             "source_body": group.get("source_body", ""),
                             "project13": bool(group.get("project13")),
+                            "comic_prompt_plan": group.get("comic_prompt_plan"),
                             "six_grid_style": bool(group.get("six_grid_style")),
+                            "six_grid_style_prompt": group.get("six_grid_style_prompt"),
+                            "six_grid_style_source": group.get("six_grid_style_source"),
                             "reference_sequence": reference_sequence,
                             "has_continuity_image": bool(continuity_path),
                         },
@@ -20447,6 +20364,82 @@ class PicFactoryGUI:
 
     def run(self):
         self.root.mainloop()
+
+    def account_generation_requires_text(self, accounts, config):
+        for account in accounts:
+            mode = self.account_generation_mode(account)
+            if mode == GENERATION_MODE_GRID_STYLE:
+                return True
+            if (mode == GENERATION_MODE_13 and prompt_mode(config) == "local"
+                    and not self.account_save_comment_enabled(account)):
+                continue
+            return True
+        return False
+
+    def start_comic_prompt_export(self):
+        if self.account_generation_running:
+            messagebox.showinfo("提示", "请先等待当前账号生图或Prompt导出结束。")
+            return
+        api_path = self.account_generation_api_config_var.get().strip()
+        if not api_path or not Path(api_path).is_file():
+            messagebox.showinfo("提示", "请先选择包含文本API Key的API配置。")
+            return
+        input_path = filedialog.askopenfilename(title="选择含优化稿列的段子表格",
+                                               filetypes=[("段子表格", "*.xlsx *.xlsm *.csv *.tsv")])
+        if not input_path:
+            return
+        output = filedialog.askdirectory(title="选择Prompt输出目录，已有匹配结果会自动复用")
+        if not output:
+            return
+        self.account_generation_running = True
+        self.account_generation_stop_requested = False
+        self.account_generation_stop_event = threading.Event()
+        self.set_account_generation_running_buttons(True)
+        self.set_account_generation_summary("正在从优化稿列编排漫画Prompt，不生成图片…")
+        threading.Thread(target=self.comic_prompt_export_worker, args=(input_path, output, api_path), daemon=True).start()
+
+    def comic_prompt_export_worker(self, input_path, output, api_path):
+        try:
+            records = read_story_table(input_path, "优化稿")
+            httpx, _ = self.load_storyboard_runtime()
+            text_api = self.load_storyboard_api_config(api_path)
+            stop_event = self.account_generation_stop_event
+            def plan_one(body, count):
+                try:
+                    key_start = self.next_text_api_key_start(len(text_api["keys"]))
+                    return self.plan_project13_semantically(httpx, text_api, body, count, key_start, stop_event)
+                except Exception as exc:
+                    error = str(exc)
+                    for key in text_api["keys"]:
+                        error = error.replace(key, "[redacted]")
+                    raise RuntimeError(error) from None
+            report = export_story_prompts(records, output, plan_one, count=6,
+                                          stopped=stop_event.is_set, progress=self.account_generation_log)
+            label = "Prompt导出已停止" if report["stopped"] else "Prompt导出结束"
+            summary = f"{label}：新生成{report['success']}条，复用{report['skipped']}条，失败{report['failed']}条。"
+            self.account_generation_log(summary)
+            self.set_account_generation_summary(summary, warning=bool(report["failed"]))
+        except Exception as exc:
+            self.account_generation_log(f"Prompt导出失败：{exc}")
+            self.set_account_generation_summary(f"Prompt导出失败：{exc}", warning=True)
+        finally:
+            self.account_generation_running = False
+            self.set_account_generation_running_buttons(False)
+
+    def plan_project13_semantically(self, httpx, text_api, body, count, key_start, stop_event, label="标题"):
+        """A separate text conversation plans once; image retries reuse the plan."""
+        context = {}
+        try:
+            return generate_semantic_plan(
+                body, count,
+                lambda request: self.call_account_generation_text(httpx, text_api, request, key_start,
+                                                                 stop_event, conversation_context=context),
+                max_attempts=2,
+                on_attempt=lambda attempt: self.account_generation_log(f"{label} 语义编排：第{attempt}/2次，校验分格、人物与数字。"),
+            )
+        finally:
+            self.close_account_generation_text_context(context)
+
 
 
 if __name__ == "__main__":
