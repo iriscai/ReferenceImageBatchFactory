@@ -5,6 +5,7 @@ from comic_prompt_planner import (MODE_LOCAL, MODE_SEMANTIC, SEMANTIC_VERSION, P
                                  generate_semantic_plan, prompt_mode, render_semantic_prompt)
 from comic_prompt_batch import read_story_table, export_story_prompts
 from strong_reference_prompt import NARRATION_REFERENCE_RULE
+from multi_reference_mode import MultiReferenceModeMixin, GENERATION_MODE_MULTI_REFERENCE
 import base64
 import concurrent.futures
 import contextlib
@@ -184,6 +185,7 @@ GENERATION_MODES = (
     GENERATION_MODE_13,
     GENERATION_MODE_REFERENCE_SEQUENCE,
     GENERATION_MODE_GRID_STYLE,
+    GENERATION_MODE_MULTI_REFERENCE,
 )
 PROJECT13_IMAGE_SIZE = "1024x1536"
 # 项目 13 清洗后的参考图提示词。格子坐标由代码按宫格字段另附，不写进这里。
@@ -3734,7 +3736,7 @@ class MatrixEditor(tk.Toplevel):
         return f"{self.identity_label}-{self.app.display_dimension_label(self.dimension_label)}"
 
 
-class PicFactoryGUI:
+class PicFactoryGUI(MultiReferenceModeMixin):
     def __init__(self):
         self.state = normalize_state()
         self.root = tk.Tk()
@@ -3941,6 +3943,20 @@ class PicFactoryGUI:
         self._build()
         self.render_startup_shell()
         self.root.after(80, self.refresh_all)
+        from title_library_bridge import start_receiver
+        start_receiver(self, MATRIX_DB_PATH)
+
+    def refresh_title_library_after_push(self, identities):
+        """Only repaint the live title table; never normalize accounts or rebuild the app."""
+        self.last_workbench_push_count = len(identities)
+        if self.current_workspace != "title_library":
+            return
+        callback = getattr(self, "_title_library_refresh_callback", None)
+        table = getattr(self, "_title_library_table_widget", None)
+        if callable(callback) and table is not None and table.winfo_exists():
+            callback(identities)
+        else:
+            self.root.after_idle(self.refresh_all)
 
     def _setup_style(self):
         style = ttk.Style()
@@ -5572,6 +5588,8 @@ class PicFactoryGUI:
         refresh_table()
 
     def render_collection_list_page(self, parent, title: str, collection_key: str, fields: list[dict], description: str = "", prepare_record=None, initialize_missing=True, initialize_metadata=True):
+        if collection_key == "wechat_accounts":
+            self.render_multi_reference_config_button(parent)
         """Full-width management list with filters, paging and modal editing."""
         records = self.state.setdefault(collection_key, [])
         if not isinstance(records, list):
@@ -5780,6 +5798,10 @@ class PicFactoryGUI:
             return result
 
         def refresh_table(select_uuid=""):
+            if collection_key == "title_library":
+                from title_library_bridge import sync_pushed_titles
+                sync_pushed_titles(self.state, MATRIX_DB_PATH)
+                self.render_title_library_remaining_summary(refresh_only=True)
             if category_field and category_combo["widget"] is not None:
                 category_values = sorted({str(field_raw(record, category_field) or "").strip() for record in records if str(field_raw(record, category_field) or "").strip()})
                 choices = ["全部分类", *category_values]
@@ -5849,6 +5871,10 @@ class PicFactoryGUI:
                 size = max(1, int(page_size_var.get()))
             except ValueError:
                 size = 20
+            if select_uuid:
+                index = next((i for i, record in enumerate(visible_records) if str(record.get("uuid")) == str(select_uuid)), None)
+                if index is not None:
+                    page["value"] = index // size + 1
             total_pages = max(1, (len(visible_records) + size - 1) // size)
             page["value"] = min(max(1, page["value"]), total_pages)
             start = (page["value"] - 1) * size
@@ -6251,6 +6277,16 @@ class PicFactoryGUI:
             suffix = f"，跳过 {skipped} 条不完整记录" if skipped else ""
             messagebox.showinfo("导入完成", f"已更新 {update_count} 条、新增 {add_count} 条{title}记录{suffix}。")
 
+        if collection_key == "title_library":
+            def refresh_live_title_page(identities=()):
+                if not tree.winfo_exists():
+                    return
+                visible = {str(row.get("uuid")) for row in filtered_records()}
+                target = next((identity for identity in identities if str(identity) in visible), "")
+                refresh_table(target)
+            self._title_library_table_widget = tree
+            self._title_library_refresh_callback = refresh_live_title_page
+
         tree.bind("<Button-1>", on_table_click)
         keyword_var.trace_add("write", lambda *_: self.queue_list_refresh(tree, refresh_table))
         status_var.trace_add("write", lambda *_: refresh_table())
@@ -6432,15 +6468,26 @@ class PicFactoryGUI:
             remaining.setdefault(category, 0)
         return remaining
 
-    def render_title_library_remaining_summary(self):
+    def render_title_library_remaining_summary(self, refresh_only: bool = False):
         low_threshold = 50
         remaining = self.title_library_remaining_counts()
         total = sum(remaining.values())
         categories = sorted(remaining)
         low_items = [(category, remaining[category]) for category in categories if remaining[category] <= low_threshold]
 
-        bar = ttk.LabelFrame(self.main, text="剩余可用标题", padding=10)
-        bar.pack(fill="x", padx=10, pady=(10, 0))
+        signature = tuple(sorted(remaining.items()))
+        old_bar = getattr(self, "_title_library_summary_frame", None)
+        if refresh_only and old_bar is not None and old_bar.winfo_exists():
+            if signature == getattr(self, "_title_library_summary_signature", None):
+                return
+            bar = old_bar
+            for child in bar.winfo_children():
+                child.destroy()
+        else:
+            bar = ttk.LabelFrame(self.main, text="剩余可用标题", padding=10)
+            bar.pack(fill="x", padx=10, pady=(10, 0))
+        self._title_library_summary_frame = bar
+        self._title_library_summary_signature = signature
 
         header = tk.Frame(bar, bg=COLORS["white"])
         header.pack(fill="x")
@@ -6451,7 +6498,8 @@ class PicFactoryGUI:
             tk.Label(header, text=warning, bg=COLORS["danger_soft"], fg=COLORS["danger_dark"], font=("Microsoft YaHei", 10, "bold"), padx=10, pady=4, anchor="w").pack(side="left", fill="x", expand=True)
             # 弹窗提醒：进入标题库工作区时若存在余量不足（≤50）的分类，弹出明细提示。
             detail = "\n".join(f"• {category}：剩余 {count} 条" for category, count in low_items)
-            self.root.after(150, lambda d=detail: messagebox.showwarning("标题余量提醒", f"以下分类剩余可用标题不足（≤50）：\n\n{d}"))
+            if not refresh_only:
+                self.root.after(150, lambda d=detail: messagebox.showwarning("标题余量提醒", f"以下分类剩余可用标题不足（≤50）：\n\n{d}"))
         else:
             tk.Label(header, text="✓ 各分类余量充足(>50)", bg=COLORS["success_soft"], fg=COLORS["success_dark"], font=("Microsoft YaHei", 10, "bold"), padx=10, pady=4, anchor="w").pack(side="left", fill="x", expand=True)
 
@@ -11653,6 +11701,8 @@ class PicFactoryGUI:
         ``image_path`` is the resolved reference file (empty in style mode) so
         worker threads never touch the state again once the batch has started.
         """
+        if self.account_generation_mode(account) == GENERATION_MODE_MULTI_REFERENCE:
+            return self.multi_reference_binding(account)
         account = account if isinstance(account, dict) else {}
         if self.account_generation_mode(account) == GENERATION_MODE_13:
             resolved = self.account_generation_reference(account, mode_label=GENERATION_MODE_13)
@@ -11722,6 +11772,8 @@ class PicFactoryGUI:
 
     def account_generation_binding_display(self, account: dict | None) -> str:
         """One-line 生图方式 + binding status for the account list."""
+        if self.account_generation_mode(account) == GENERATION_MODE_MULTI_REFERENCE:
+            return self.multi_reference_binding_display(account)
         account = account if isinstance(account, dict) else {}
         mode = self.account_generation_mode(account)
         if mode in {GENERATION_MODE_STYLE, GENERATION_MODE_GRID_STYLE}:
@@ -13498,6 +13550,8 @@ class PicFactoryGUI:
         return work
 
     def execute_account_generation_title(self, httpx, text_api: dict, image_api: dict, account: dict, title_record: dict, config: dict, article_template: dict, storyboard_rule: dict, binding: dict, stop_event) -> dict:
+        if self.account_generation_mode(account) == GENERATION_MODE_MULTI_REFERENCE:
+            return self.execute_multi_reference_account_title(httpx, text_api, image_api, account, title_record, config, article_template, storyboard_rule, binding, stop_event)
         if self.account_generation_mode(account) == GENERATION_MODE_GRID_STYLE or str(binding.get("mode", "")) == "six_grid_style":
             return self.execute_six_grid_style_account_title(httpx, text_api, image_api, account, title_record, config, binding, stop_event)
         if self.account_generation_mode(account) == GENERATION_MODE_13 or str(binding.get("mode", "")) == "project13":
@@ -14081,7 +14135,7 @@ class PicFactoryGUI:
                 title_count = 0
             rule_name = str(config.get("storyboard_prompt_rule", "")).strip()
             storyboard_rule = next((x for x in self.account_generation_prompt_records("storyboard_prompt_rules") if str(x.get("template_name", "")).strip() == rule_name), None)
-            needs_storyboard = any(self.account_generation_mode(account) not in {GENERATION_MODE_13, GENERATION_MODE_GRID_STYLE} for account in accounts)
+            needs_storyboard = any(self.account_generation_mode(account) not in {GENERATION_MODE_13, GENERATION_MODE_GRID_STYLE, GENERATION_MODE_MULTI_REFERENCE} for account in accounts)
             if needs_storyboard and (not storyboard_rule or not str(storyboard_rule.get("prompt_content", "") or storyboard_rule.get("content", "")).strip()):
                 raise RuntimeError("请先选择有效的分镜 Prompt 规则，且规则内容不能为空。")
             # Build all account candidates before starting the executor. Title
@@ -14167,13 +14221,16 @@ class PicFactoryGUI:
                 if binding.get("mode") in {"project13", "six_grid_style"}:
                     mode_label = GENERATION_MODE_GRID_STYLE if binding.get("mode") == "six_grid_style" else GENERATION_MODE_13
                     article_template = article_template or {"template_name": article_name, "detail": ""}
+                elif binding.get("mode") == "multi_reference":
+                    mode_label = GENERATION_MODE_MULTI_REFERENCE
+                    article_template = article_template or {"template_name": article_name, "detail": ""}
                 elif binding.get("mode") == "reference_sequence":
                     mode_label = GENERATION_MODE_REFERENCE_SEQUENCE
                 elif binding.get("mode") == "reference":
                     mode_label = GENERATION_MODE_REFERENCE
                 else:
                     mode_label = GENERATION_MODE_STYLE
-                if binding.get("mode") not in {"project13", "six_grid_style"}:
+                if binding.get("mode") not in {"project13", "six_grid_style", "multi_reference"}:
                     if not article_template or not str(article_template.get("detail", "") or article_template.get("content", "")).strip():
                         raise RuntimeError(f"公众号「{account.get('name', account.get('account_id', ''))}」未配置有效的文章提示词。")
                 account_config = dict(config)
@@ -20345,6 +20402,8 @@ class PicFactoryGUI:
         STATE_PATH.write_text(json.dumps(persisted, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     def save_state(self):
+        from title_library_bridge import sync_pushed_titles
+        sync_pushed_titles(self.state, MATRIX_DB_PATH)
         self.flush_loaded_identity_options()
         sanitize_production_style_configs(self.state)
         # Keep duplicate title-library rows synchronized whenever management
@@ -20407,6 +20466,9 @@ class PicFactoryGUI:
 
     def run(self):
         self.root.mainloop()
+
+    def multi_reference_save_account(self, account):
+        upsert_db_collection_item("wechat_accounts", account)
 
     def account_generation_requires_text(self, accounts, config):
         for account in accounts:

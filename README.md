@@ -46,3 +46,13 @@ python -m PyInstaller --noconfirm --clean PicFactoryGUI.spec
 ## 界面响应修复
 
 账号卡片采用轻量绘制和局部勾选更新，关键词输入合并刷新，配置保存减少无关数据处理。实测范围及回归说明见 [界面响应修复](docs/ui-responsiveness-20261102.md)。生图规则、参考图上传和画风Prompt保持原样。
+
+
+## 多参考图独立扩展
+
+新增独立多参考图模式；在账号管理中点击“多参考图配置”，分别多选背景与画风图、人物形象图。旧模式保留原有绑定。详见 [独立链路与验证说明](docs/multi-reference-isolated-20261102.md)。
+
+
+## 漫流标题实时接收
+
+漫流推送后自动接收并同步当前标题库，保留原生图模式与账号配置。协议、去重、回执和验证见 [接收说明](docs/live-title-receiver-1102.md)。项目发布维护约定见 [AGENTS.md](AGENTS.md)。
