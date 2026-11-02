@@ -1,0 +1,26 @@
+{
+  "version": "六宫格参考图+画风完整版本1023",
+  "source_version": "2026-10-23 15:43:00",
+  "status": "用户已验证的历史基线",
+  "application_source_unchanged": true,
+  "files_sha256": {
+    "PicFactoryGUI.spec": "d21f38097a40052ab1105947a53a75f6e019fbd7bcd7135fada1fe2787f29eab",
+    "assets/continuous_style_icon.ico": "5455726a8d8cf5f0df410d1bf71c17cf530b599dc684734bacaf483e3b44668c",
+    "assets/reference_batch_icon.ico": "0c011acbd58db29b9100d4a76788ec14371f51b23fae19c59436227dda1d9d8d",
+    "assets/reference_batch_icon_preview.png": "ba63d959ccd4145e18c51ddceb3eb77cd99e3fd034e446ff855d9783ffb5d742",
+    "batch_v10_01_text.py": "5d39c4455fe29cac1753ed58261f7025941898a90734af26e82746661928ce41",
+    "data/document-matrices.js": "12898b46ddb12f12d202084e0bd0194364af8f7c56d43d8281c8eded30a3a52b",
+    "data/factory-data.js": "2dab2b69700fe7b0fbcfe27123dc0f62191d794cef609893dd2553c07ef84d8a",
+    "docs/README.1023-original.md": "78bf0392d086dcf68c49785108abd463436da42da28239a5a5a45f36dc2b3640",
+    "image_clarity.py": "a24fc61f717d341d5be54e236a121f188835bd490120807cca56291235ce88e2",
+    "image_refine/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "image_refine/imaging.py": "d9497543d34317ba5d473e33e023066dd37ffd45639e17739f9df5f6d15dde92",
+    "image_refine/presets.py": "d884bf34ad7730c22f8f7ac6454d9637488bd41c3315edb11ffaebffcee784d8",
+    "image_refine/schemas.py": "73b0b16750595460e35f08fac6e88acd90764b50c8223f32340254c3a3d5ad97",
+    "image_splitter.py": "c84fcfb2e4db576a6b573a57cace079b31059bc1494d0b4ef5d215efd9542ff6",
+    "launch_gui.cmd": "56d15c747b3452164783db78d8df15f3d8661f418c9019cf97843d857121d968",
+    "launch_gui.py": "cd6aef04429607dcf1b21903f73df7a3948e72ef09348e19f0fd0248223070a0",
+    "naturalize_jfif_small_sharp_v10.py": "969f86ac84b91feb56b27195ef364d2ef14c0b352c236ea1e5b6ca827779a72e",
+    "picfactory_gui.py": "f540fab00bbc4fe2ca643ed00c579372907ba88e09e555e2a7a5c25c6bf0e285"
+  }
+}

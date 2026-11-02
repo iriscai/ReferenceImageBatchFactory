@@ -1,0 +1,11 @@
+* text=auto
+
+# Preserve the verified historical source bytes on every platform.
+*.py -text
+*.js -text
+*.spec -text
+*.cmd -text
+docs/README.1023-original.md -text
+
+*.ico binary
+*.png binary

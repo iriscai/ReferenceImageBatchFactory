@@ -1,0 +1,42 @@
+# Python / local tools
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Local credentials and runtime state
+.env
+.env.*
+!.env.example
+auth.json
+api_config*.json
+*_api_config*.json
+*credentials*.json
+*secrets*.json
+picfactory_state*.json
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Local accounts, inputs and generated artifacts
+reference_images/
+reference_images_*/
+logs/
+backups/
+outputs/
+文档输出/
+*.xlsx
+*.xlsm
+*.csv
+*.zip
+*.7z
+*.exe
+*.log
+build/
+build_*/
+dist/
+dist_*/
+historical_*/
