@@ -5018,6 +5018,12 @@ class PicFactoryGUI:
                 category_var.set("全部分类")
                 return
             tree.delete(*tree.get_children())
+            reference_account_counts = {}
+            for account in self.state.get("wechat_accounts", []):
+                if isinstance(account, dict):
+                    reference_name = str(account.get("reference_name", "")).strip()
+                    if reference_name:
+                        reference_account_counts[reference_name] = reference_account_counts.get(reference_name, 0) + 1
             visible = 0
             for record in self.reference_images():
                 enabled = record.get("enabled", True) is not False
@@ -5038,7 +5044,7 @@ class PicFactoryGUI:
                     size,
                     path.name if path else "文件缺失",
                     "启用" if enabled else "停用",
-                    len(self.reference_image_accounts(record.get("name", ""))),
+                    reference_account_counts.get(str(record.get("name", "")).strip(), 0),
                     description[:60] + ("…" if len(description) > 60 else ""),
                     record.get("updated_at", ""),
                 ))
@@ -5203,7 +5209,7 @@ class PicFactoryGUI:
 
         tree.bind("<<TreeviewSelect>>", on_select)
         tree.bind("<Double-1>", open_selected_image)
-        keyword_var.trace_add("write", lambda *_: refresh_table())
+        keyword_var.trace_add("write", lambda *_: self.queue_list_refresh(tree, refresh_table))
         category_var.trace_add("write", lambda *_: refresh_table())
         status_var.trace_add("write", lambda *_: refresh_table())
         refresh_table()
@@ -6246,7 +6252,7 @@ class PicFactoryGUI:
             messagebox.showinfo("导入完成", f"已更新 {update_count} 条、新增 {add_count} 条{title}记录{suffix}。")
 
         tree.bind("<Button-1>", on_table_click)
-        keyword_var.trace_add("write", lambda *_: refresh_table())
+        keyword_var.trace_add("write", lambda *_: self.queue_list_refresh(tree, refresh_table))
         status_var.trace_add("write", lambda *_: refresh_table())
         category_var.trace_add("write", lambda *_: refresh_table())
         owner_var.trace_add("write", lambda *_: refresh_table())
@@ -12048,91 +12054,125 @@ class PicFactoryGUI:
         selected_ids = getattr(self, "account_generation_selected_account_ids", None)
         if selected_ids is not None:
             config["selected_account_ids"] = sorted(str(value).strip() for value in selected_ids if str(value).strip())
-        self.save_state()
+        persist_db_settings(self.state)
+        self.write_state_file()
 
     def account_generation_refresh_account_list(self):
-        cards_frame = getattr(self, "account_generation_cards_frame", None)
-        if cards_frame is None:
+        canvas = getattr(self, "account_generation_cards_canvas", None)
+        if canvas is None or not canvas.winfo_exists():
+            return
+        accounts = self.account_generation_visible_accounts()
+        signature = tuple((str(a.get("uuid", a.get("account_id", ""))),
+                           str(a.get("account_id", "")), str(a.get("name", "")),
+                           str(a.get("owner_user", "")), self.account_generation_mode(a)) for a in accounts)
+        if getattr(self, "_account_card_signature", None) != signature:
+            self._account_card_signature = signature
+            self._account_card_rows = accounts
+            self._account_card_width = None
+            self._draw_account_generation_cards()
+        else:
+            self._update_account_generation_card_selection()
+
+    def _account_generation_card_colors(self, account, selected):
+        mode = self.account_generation_mode(account)
+        if selected:
+            return COLORS["blue"], COLORS["white"], "#dbeafe", COLORS["white"]
+        if mode in {GENERATION_MODE_13, GENERATION_MODE_GRID_STYLE}:
+            background, mode_color = COLORS["accent_soft"], COLORS["accent"]
+        elif mode == GENERATION_MODE_REFERENCE_SEQUENCE:
+            background, mode_color = COLORS["blue_soft"], COLORS["blue"]
+        else:
+            background, mode_color = COLORS["white"], COLORS["blue"]
+        return background, COLORS["text"], COLORS["muted"], mode_color
+
+    def _draw_account_generation_cards(self, width=None):
+        canvas = getattr(self, "account_generation_cards_canvas", None)
+        if canvas is None or not canvas.winfo_exists():
+            return
+        width = max(100, int(width or canvas.winfo_width()))
+        if getattr(self, "_account_card_width", None) == width:
+            self._update_account_generation_card_selection()
+            return
+        self._account_card_width = width
+        canvas.delete("all")
+        self._account_card_items = {}
+        accounts = getattr(self, "_account_card_rows", [])
+        columns, row_height = 10, 66
+        cell_width = width / columns
+        self._account_card_cell_width = cell_width
+        if not accounts:
+            canvas.create_text(10, 16, anchor="nw", text="当前筛选没有可用公众号", fill=COLORS["muted"])
+        selected_ids = getattr(self, "account_generation_selected_account_ids", set())
+        for index, account in enumerate(accounts):
+            key = str(account.get("uuid", account.get("account_id", ""))).strip()
+            selected = key in selected_ids or str(account.get("account_id", "")).strip() in selected_ids
+            background, foreground, owner_color, mode_color = self._account_generation_card_colors(account, selected)
+            x, y = (index % columns) * cell_width, (index // columns) * row_height
+            rectangle = canvas.create_rectangle(x + 1, y + 1, x + cell_width - 1, y + row_height - 1,
+                                                fill=background, outline=COLORS["blue"] if selected else "#d8e1e8")
+            name = canvas.create_text(x + 6, y + 4, anchor="nw", width=max(8, cell_width - 12),
+                                      text=str(account.get("name") or account.get("account_id") or "未命名公众号"),
+                                      fill=foreground, font=("Microsoft YaHei", 9, "bold"))
+            owner = canvas.create_text(x + 6, y + 31, anchor="nw", width=max(8, cell_width - 12),
+                                       text=str(account.get("owner_user") or "未分配用户"),
+                                       fill=owner_color, font=("Microsoft YaHei", 8))
+            mode = canvas.create_text(x + 6, y + 47, anchor="nw", width=max(8, cell_width - 12),
+                                      text=self.account_generation_mode(account), fill=mode_color,
+                                      font=("Microsoft YaHei", 8, "bold"))
+            self._account_card_items[key] = (account, rectangle, name, owner, mode, selected)
+        canvas.configure(scrollregion=(0, 0, width, max(66, ((len(accounts) + columns - 1) // columns) * row_height)))
+
+    def _update_account_generation_card_selection(self):
+        canvas = getattr(self, "account_generation_cards_canvas", None)
+        if canvas is None or not canvas.winfo_exists():
             return
         selected_ids = getattr(self, "account_generation_selected_account_ids", set())
-        for child in cards_frame.winfo_children():
-            child.destroy()
-        card_columns = 10
-        for column in range(card_columns):
-            cards_frame.columnconfigure(column, weight=1, uniform="account_cards")
-        accounts = self.account_generation_visible_accounts()
-        if not accounts:
-            ttk.Label(cards_frame, text="当前筛选没有可用公众号", style="Muted.TLabel").grid(
-                row=0, column=0, columnspan=card_columns, sticky="w", padx=8, pady=12
-            )
-            return
-        for index, account in enumerate(accounts):
-            account_key = str(account.get("uuid", account.get("account_id", ""))).strip()
-            account_id = str(account.get("account_id", "")).strip()
-            account_name = str(account.get("name", "")).strip() or account_id or "未命名公众号"
-            owner_name = str(account.get("owner_user", "") or "").strip() or "未分配用户"
-            selected = account_key in selected_ids or account_id in selected_ids
-            mode = self.account_generation_mode(account)
-            mode_text = mode if mode in GENERATION_MODES else GENERATION_MODE_REFERENCE
-            if selected:
-                idle_bg, idle_mode_fg = COLORS["blue"], COLORS["white"]
-            elif mode in {GENERATION_MODE_13, GENERATION_MODE_GRID_STYLE}:
-                idle_bg, idle_mode_fg = COLORS["accent_soft"], COLORS["accent"]
-            elif mode == GENERATION_MODE_REFERENCE_SEQUENCE:
-                idle_bg, idle_mode_fg = COLORS["blue_soft"], COLORS["blue"]
-            else:
-                idle_bg, idle_mode_fg = COLORS["white"], COLORS["blue"]
-            card_bg = idle_bg
-            card_fg = COLORS["white"] if selected else COLORS["text"]
-            owner_fg = "#dbeafe" if selected else COLORS["muted"]
-            mode_fg = idle_mode_fg
-            card = tk.Frame(
-                cards_frame,
-                width=112,
-                height=64,
-                bg=card_bg,
-                relief="raised" if not selected else "sunken",
-                bd=1,
-                cursor="hand2",
-            )
-            card.grid(row=index // card_columns, column=index % card_columns, sticky="nsew", padx=1, pady=1)
-            card.pack_propagate(False)
-            name_label = tk.Label(
-                card,
-                text=account_name,
-                bg=card_bg,
-                fg=card_fg,
-                font=("Microsoft YaHei", 9, "bold"),
-                anchor="w",
-                justify="left",
-                wraplength=96,
-                cursor="hand2",
-            )
-            name_label.pack(fill="x", padx=6, pady=(4, 0))
-            owner_label = tk.Label(
-                card,
-                text=owner_name,
-                bg=card_bg,
-                fg=owner_fg,
-                font=("Microsoft YaHei", 8),
-                anchor="w",
-                justify="left",
-                wraplength=96,
-                cursor="hand2",
-            )
-            owner_label.pack(fill="x", padx=6)
-            mode_label = tk.Label(
-                card,
-                text=mode_text,
-                bg=card_bg,
-                fg=mode_fg,
-                font=("Microsoft YaHei", 8, "bold"),
-                anchor="w",
-                cursor="hand2",
-            )
-            mode_label.pack(fill="x", padx=6, pady=(0, 3))
-            for widget in (card, name_label, owner_label, mode_label):
-                widget.bind("<Button-1>", lambda _event, key=account_key: self.account_generation_toggle_account(key))
+        for key, entry in list(getattr(self, "_account_card_items", {}).items()):
+            account, rectangle, name, owner, mode, previous = entry
+            selected = key in selected_ids or str(account.get("account_id", "")).strip() in selected_ids
+            if selected == previous:
+                continue
+            background, foreground, owner_color, mode_color = self._account_generation_card_colors(account, selected)
+            canvas.itemconfigure(rectangle, fill=background, outline=COLORS["blue"] if selected else "#d8e1e8")
+            canvas.itemconfigure(name, fill=foreground)
+            canvas.itemconfigure(owner, fill=owner_color)
+            canvas.itemconfigure(mode, fill=mode_color)
+            self._account_card_items[key] = (account, rectangle, name, owner, mode, selected)
+
+    def _on_account_generation_card_click(self, event):
+        canvas = self.account_generation_cards_canvas
+        width = getattr(self, "_account_card_cell_width", 0)
+        if width <= 0:
+            return "break"
+        x, y = canvas.canvasx(event.x), canvas.canvasy(event.y)
+        if x < 0 or y < 0:
+            return "break"
+        column = min(9, int(x / width))
+        index = int(y // 66) * 10 + column
+        accounts = getattr(self, "_account_card_rows", [])
+        if 0 <= index < len(accounts):
+            account = accounts[index]
+            self.account_generation_toggle_account(str(account.get("uuid", account.get("account_id", ""))))
+        return "break"
+
+    def queue_list_refresh(self, owner, callback):
+        """Coalesce a burst of keystrokes; never update a destroyed table."""
+        timers = getattr(self, "_list_refresh_timers", None)
+        if timers is None:
+            timers = self._list_refresh_timers = {}
+        key = str(owner)
+        previous = timers.pop(key, None)
+        if previous is not None:
+            try:
+                self.root.after_cancel(previous)
+            except tk.TclError:
+                pass
+        def run():
+            timers.pop(key, None)
+            if owner.winfo_exists():
+                callback()
+        timers[key] = self.root.after(150, run)
+
 
     def account_generation_toggle_account(self, account_key=None):
         if account_key is None:
@@ -12276,12 +12316,15 @@ class PicFactoryGUI:
         cards_canvas.configure(yscrollcommand=cards_scrollbar.set)
         cards_canvas.pack(side="left", fill="both", expand=True)
         cards_scrollbar.pack(side="right", fill="y")
-        cards_frame = ttk.Frame(cards_canvas)
-        cards_window = cards_canvas.create_window((0, 0), window=cards_frame, anchor="nw")
-        cards_frame.bind("<Configure>", lambda _event: cards_canvas.configure(scrollregion=cards_canvas.bbox("all")))
-        cards_canvas.bind("<Configure>", lambda event: cards_canvas.itemconfigure(cards_window, width=event.width))
-        self.account_generation_cards_frame = cards_frame
+        self.account_generation_cards_frame = cards_canvas
         self.account_generation_cards_canvas = cards_canvas
+        self._account_card_signature = None
+        self._account_card_rows = []
+        self._account_card_items = {}
+        self._account_card_width = None
+        cards_canvas.configure(cursor="hand2")
+        cards_canvas.bind("<Configure>", lambda event: self._draw_account_generation_cards(event.width))
+        cards_canvas.bind("<Button-1>", self._on_account_generation_card_click)
         configured_ids = self.account_generation_defaults.get("selected_account_ids", [])
         self.account_generation_selected_account_ids = {str(value).strip() for value in configured_ids if str(value).strip()} if isinstance(configured_ids, (list, tuple, set)) else set()
         if not self.account_generation_selected_account_ids:

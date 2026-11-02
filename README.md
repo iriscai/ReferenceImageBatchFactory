@@ -41,3 +41,8 @@ python -m PyInstaller --noconfirm --clean PicFactoryGUI.spec
 ```
 
 源码版本和模型输出质量应分别验收。同一输入的画风编排请求与Prompt已验证不受本次参考图规则更新影响；图像模型仍可能产生文字或绘画偏差。
+
+
+## 界面响应修复
+
+账号卡片采用轻量绘制和局部勾选更新，关键词输入合并刷新，配置保存减少无关数据处理。实测范围及回归说明见 [界面响应修复](docs/ui-responsiveness-20261102.md)。生图规则、参考图上传和画风Prompt保持原样。
