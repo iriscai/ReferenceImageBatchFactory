@@ -109,7 +109,7 @@ class MultiReferenceTests(unittest.TestCase):
         binding = self.app.account_generation_binding(self.account)
         prompt = self.app.build_multi_reference_frame_prompt(1, 2, '标题', '完整原文。', '人物点头',
                     binding['names'], '32x48', reference_roles=binding['reference_roles'])
-        for text in ['第1张：背景；用途：背景与画风', '第2张：形象；用途：人物形象',
+        for text in ['第1张：背景；用途：仅参考画风', '第2张：形象；用途：仅参考画风',
                      '完整原文。', '不复制设定图的白底', '最高依据']:
             self.assertIn(text, prompt)
 
@@ -169,6 +169,8 @@ class MultiReferenceTests(unittest.TestCase):
         self.assertGreater(len(records), 1)
         self.assertTrue(all(len(r['uploads']) == 2 for r in records))
         self.assertTrue(all([f[2] for f in r['uploads']] == [b'original-background', b'original-character'] for r in records))
+        self.assertTrue(all(body in r['data']['prompt'] for r in records))
+        self.assertTrue(all('仅迁移画风' in r['data']['prompt'] for r in records))
         self.app.call_image_generation.assert_not_called()
 
     def test_worker_schedules_multi_reference_without_article_template(self):

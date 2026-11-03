@@ -265,10 +265,11 @@ class MultiReferenceModeMixin(MultiReferencePickerMixin):
 
     def multi_reference_supporting_cast_prompt(self, title: str, body: str, character_detail: str) -> str:
         """Ask for supporting appearances before any storyboard prompt is written."""
-        character = str(character_detail or "").strip() or "主角色的外形以形象参考图为准。"
+        character = "主角色身份只由本篇标题与正文确定，外貌在各分镜中保持同一套合理设定。"
         return (
             "你在切分镜之前，先为本篇锁定副角色形象。不要写分镜，不要改写正文，不要解释。\n"
-            "主角色已经有形象参考图。不要设计主角色，不要重复主角色的职业服装、发型和配饰。\n"
+            "本模式仅参考画风，不启用形象图或参考人物锁定。主角色与副角色的身份只能取本篇标题和正文；"
+            "历史账号人设、参考图人物及其职业服装不属于本篇内容。副角色应与本篇主角色具有清楚的外貌区分。\n"
             "只根据正文判断除主角色以外还需要哪些人。不需要别人时，只输出一行：无副角色\n"
             f"最多 {MULTI_REFERENCE_MAX_SUPPORTING_CAST} 个。每个副角色单独一行，严格使用这个格式：\n"
             "副角色N：称呼｜年龄段｜发型｜服装｜和主角色的区分\n"
@@ -368,21 +369,25 @@ class MultiReferenceModeMixin(MultiReferencePickerMixin):
             )
         return (
             "【副角色固定形象】\n"
-            "这些副角色在切分镜之前已经固定。形象参考图只画主角色，禁止把参考图里的脸、发型、服装和配饰复制给副角色。\n"
+            "这些副角色根据本篇正文确定，身份属于本篇故事。多参考图模式不启用形象图或参考人物锁定；"
+            "任何参考图中的人脸、服装、人物照片和肖像均不能充当本篇角色。\n"
             "每一张都使用下面同一套年龄、发型、服装和区分特征，不能逐张改。\n"
-            "主角色和副角色分开站立，轮廓不要重叠，不要画成同一个人的大小两份。\n"
+            "主角色和副角色保持可区分的外貌，不画成同一个人的大小两份。"
+            "只画本张分镜需要的角色；若人物仅出现在车贴、照片或手机画面中，不让其作为真人到场。\n"
             "如果场景里写的外貌和这里冲突，以这里的固定形象为准。\n"
             f"{cast}\n"
         )
 
     def multi_reference_storyboard_split_prompt(self, rule: dict | None, title: str, body: str, character_detail: str, supporting_cast: str = "") -> str:
         """Ask the storyboard rule where to cut. The copies themselves stay verbatim."""
-        rule_text = self.multi_reference_storyboard_rule_text(rule, title, body, character_detail)
+        rule_text = self.multi_reference_storyboard_rule_text(rule, title, body, "")
         rule_block = f"【分镜规则】\n{rule_text}\n\n" if rule_text else ""
         cast_block = self.multi_reference_cast_split_block(supporting_cast)
         return (
             "你只负责把正文按叙事顺序切成多个分镜。不要把正文改写成文章，不要写留言，不要解释。\n"
             f"{rule_block}"
+            "本模式的参考图只提供画风，不提供人物身份、场景事件或文字。分镜内容只依据下方的新标题与正文，"
+            "不套用账号历史人设，不写按形象图锁定人物的要求。\n"
             "规则只用来判断在哪里切开、每一张画什么场景。"
             "正文必须整段用完：每一张【文案】都是正文里的连续原句，按场景画面序号首尾相接后必须正好等于整段正文。"
             "不允许只挑代表节点而丢掉其余句子，不允许概括，不允许改字，不允许把后文提前。"
@@ -397,6 +402,9 @@ class MultiReferenceModeMixin(MultiReferencePickerMixin):
             "【场景】\n"
             "这一张的地点、在场人物、动作、表情、道具和构图。不写画风、线条、配色、图片尺寸、参考图。"
             "图片尺寸在切分镜之前已经指定，每一张都相同，场景里不要再写。\n\n"
+            "场景中涉及车贴、照片、海报、手机或屏幕时，写明其中人物的正文身份及需要显示的原句。"
+            "对‘这句话’‘原标语’‘熟悉的符号’等指代，用正文中的对应人物或原文消歧，不能只写‘完整标语’等占位描述。"
+            "区分原文、误译和网友评论，不要混用。正文未说明的图案或文字不自行添加。\n\n"
             f"{cast_block}"
             f"【标题】{title}\n"
             f"【正文】\n{body}\n"
@@ -442,17 +450,31 @@ class MultiReferenceModeMixin(MultiReferencePickerMixin):
         self, scene_no: int, total: int, scene_title: str, copy: str, scene: str,
         names: list[str], size: str, character: str = "", canvas: dict | None = None,
         supporting_cast: str = "", reference_roles: list[dict] | None = None,
+        source_body: str = "",
     ) -> str:
-        """One self-contained image prompt. Nothing here depends on another frame's picture."""
+        """Transfer visual style, while story content stays anchored to this story."""
         cleaned_names = self.normalize_multi_reference_names(names)
         listing = "\n".join(f"{index}. {name}" for index, name in enumerate(cleaned_names, start=1)) or "（按本次上传顺序）"
-        if reference_roles:
+        roles = reference_roles or [{"name": name, "role": "background"} for name in cleaned_names]
+        if roles:
             listing = "\n".join(
-                f"第{index}张：{item['name']}；用途：{'背景与画风' if item['role'] == 'background' else '人物形象'}"
-                for index, item in enumerate(reference_roles, start=1)
+                f"第{index}张：{item['name']}；用途：仅参考画风，不提供人物、故事内容或文字"
+                for index, item in enumerate(roles, start=1)
             )
-        character_line = (f"账号人物身份与外貌补充：{character}\n"
-                          "以上补充只用于人物身份与外貌；其中历史图号、画风和排版说法均以本次参考图用途清单及分工规则为准。\n") if str(character or "").strip() else ""
+        identity_rule = (
+            "多参考图模式仅迁移画风，不启用形象图或参考人物锁定。无论历史配置给图片标注过什么用途，"
+            "本次全部上传图都只作为绘制风格样本。主角色和副角色的身份、面孔、发型、服装及道具肖像均须依据"
+            "本篇新标题、正文与本张分镜重新绘制，保持本篇人物设定连续；不能从参考图挑一张脸充当本篇人物。"
+            "参考图若为人物设定表，也只提取绘画技法，不复制设定图的白底、多视角、人物或排版。\n"
+        )
+        context = str(source_body or "").strip()
+        story_context = (
+            "【本篇正文上下文：仅用于核对人物、指代和道具文字】\n"+context+"\n"
+            "全文不是本张的展示文案，不把全文写进图片，也不提前画其他分镜。"
+            "本张提到的原标语、车贴肖像、照片或屏幕内容，必须对应全文明确的人物身份和原句；"
+            "不能用参考图人物或文字填补指代，更不能把误译当作原标语。\n\n"
+            if context else ""
+        )
         size_line = self.multi_reference_size_prompt(str((canvas or {}).get("size") or size))
         cast_line = self.multi_reference_cast_image_block(supporting_cast)
         return (
@@ -460,22 +482,30 @@ class MultiReferenceModeMixin(MultiReferencePickerMixin):
             f"【画面标题】{str(scene_title or '').strip() or f'第{scene_no}张'}\n"
             f"【本张文案】\n{str(copy or '').strip()}\n\n"
             f"【场景】\n{str(scene or '').strip() or MULTI_REFERENCE_DEFAULT_SCENE}\n\n"
+            f"{story_context}"
             "【参考图】\n"
-            "本次按下面的顺序实际上传原始参考图，各图用途如下，不得忽略任何一张。\n"
+            "本次按下面的顺序实际上传原始参考图，按用途提取视觉特征；参考图不提供本篇剧情内容。\n"
+            "参考图名称只用于对照上传顺序，不把名称中的人物、职业或故事词当作本文事实，也不在画面输出这些名称。\n"
             f"{listing}\n\n"
             f"{size_line}"
             "【多参考图生图】\n"
-            "请参考我给出的形象图，以及参考画风图：形象图只决定主角色的外形、五官、发型、服装和体态；画风图决定线条、配色、气泡样式和画面布局。\n"
-            "背景与画风图是整体画风的最高依据：保持其线条、材质、色彩、背景处理和文字容器风格，不套用默认漫画画风。"
-            "人物按形象图锁定身份，并使用背景与画风图的绘制方式融入画面。背景图中的示例人物不替换主角色，示例场景物件不强行带入无关故事。"
-            "形象图若为多角度、多格或白底设定图，只取同一个人物的外貌与服饰，不复制设定图的白底、多视角和排版。\n"
-            "将形象融入对应场景，生成与这些参考图相近的布局图。每一张参考图都要参与，不要只临摹其中一张而丢掉其余参考图里的场景或画风。形象参考图中的人物只对应主角色。\n"
-            f"{character_line}"
+            "【内容与画风的边界】\n"
+            "新图画什么，只由本篇正文、本张文案、场景和人物设定决定。背景与画风参考图是绘制方式的最高依据："
+            "强参考其线条、油画或其他材质的笔触、色彩、光影、背景表现和文字容器风格，不套用默认漫画画风。"
+            "版式仅参考文字留白、视觉密度和构图方法，具体人物、地点、道具及事件重新按新故事构图。"
+            "参考图中出现的历史人物、示例人物、人物照片、原故事情节和物件均不属于新故事。\n"
+            f"{identity_rule}"
+            "【防止参考内容混入】\n"
+            "画风参考图里的脸和人物，禁止以任何形式带入：主角、配角、路人、车贴肖像、海报、照片、手机屏幕或其他画中画都不可以。"
+            "画风图里的标题、口号、字幕、标志、页码和原场景文字也禁止照搬到新画面及其任何道具中。"
+            "道具中的肖像和标语同样属于故事内容，必须按正文指定身份和原句重绘，不能裁取或模仿画风图里的人物和文字。"
+            "即使两篇都属于同一赛道，也不得把参考图内容当成本文素材。每张参考图只贡献其用途允许的视觉特征，不要求移入各图里的具体内容。\n"
             f"{cast_line}"
             f"这是连续故事的第 {int(scene_no)} 张，共 {int(total)} 张。"
             "只画本张文案和本张场景，不要画成宫格，不要把其他分镜画进这一张。"
             "有引号的句子放进对应角色的气泡，没有引号的句子也写进画面。本张文案逐字保留，不要概括或漏句。"
-            "主角色全篇保持同一人：脸、发型、衣服以形象参考图为准，不随分镜改设定。"
+            "同篇人物按本篇分镜的人物设定持续一致，禁止用任何参考图人物替代或补充故事角色。"
+            "交付前核对所有画中人物与文字，包括车贴、照片和屏幕：均来自本篇故事；仅作画风的参考图内容不得出现。"
         )
 
     def generate_one_multi_reference_frame(
@@ -688,7 +718,7 @@ class MultiReferenceModeMixin(MultiReferencePickerMixin):
             for frame in frames:
                 image_prompt = self.build_multi_reference_frame_prompt(
                     frame["scene_no"], total, frame["title"], frame["copy"], frame["scene"],
-                    reference_names, binding_image_size, character_detail, canvas, supporting_cast, binding.get("reference_roles"),
+                    reference_names, binding_image_size, character_detail, canvas, supporting_cast, binding.get("reference_roles"), source_body=source_body,
                 )
                 scenes.append({
                     "scene_no": frame["scene_no"],

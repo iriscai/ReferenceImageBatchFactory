@@ -66,3 +66,8 @@ python -m PyInstaller --noconfirm --clean PicFactoryGUI.spec
 ## 参考图筛选
 
 多选参考图时，可按参考图库的分组/分类、标签和名称/ID/说明组合检索。标签在参考图管理中维护，筛选不会丢失勾选。详见[参考图筛选说明](docs/reference-image-filters-1103.md)。
+
+
+## 多参考图仅参考画风
+
+本模式的全部参考图只传递画风，人物、事件、肖像和文字以新正文与分镜为依据，不启用形象图锁定。详见[更新规则](docs/multi-reference-style-only-1103.md)。其他模式不变。

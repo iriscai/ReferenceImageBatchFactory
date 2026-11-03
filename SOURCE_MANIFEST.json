@@ -1,5 +1,5 @@
 {
-  "version": "1103_参考图分组标签筛选与检索修正版",
+  "version": "1103_多参考图纯画风与内容隔离修复",
   "source_version": "1023强参考基线 + 1026/1027编排与文字覆盖 + v5参考图旁白自适应",
   "base_commit": "9f492f5ff5e2fba6c6a245a312a6e7cd10d0c30d",
   "reference_prompt_version": "comic-semantic-strong-reference-candidate-v5",
@@ -10,8 +10,8 @@
     ".gitignore": "cc61682227f9bd03f167c75705dfa779492aadce5f02f3701eda596c0d4ff91a",
     "AGENTS.md": "411a2993b8ba3ae4740776242c0f240d976236e63b692a32df6de99ea04dc261",
     "PicFactoryGUI.spec": "d21f38097a40052ab1105947a53a75f6e019fbd7bcd7135fada1fe2787f29eab",
-    "README.md": "a8a31d460bfc4e44933a7399c3c42daf74b2643725217e3b40c8fa9b3062d1d5",
-    "VERSION": "bf909fb57b0ba159fd04fe9e9d064cdf6bb4ce78a6ac88e422914a3ece193427",
+    "README.md": "4fe524c12c6bc408d3f63a9eea46be13c541a275f3e249e5fe4af18f38ec813e",
+    "VERSION": "34c22149b7eb35c10634617efe0b235216594dbd669ffcc7cfce311c44d72365",
     "assets/continuous_style_icon.ico": "5455726a8d8cf5f0df410d1bf71c17cf530b599dc684734bacaf483e3b44668c",
     "assets/reference_batch_icon.ico": "0c011acbd58db29b9100d4a76788ec14371f51b23fae19c59436227dda1d9d8d",
     "assets/reference_batch_icon_preview.png": "ba63d959ccd4145e18c51ddceb3eb77cd99e3fd034e446ff855d9783ffb5d742",
@@ -26,6 +26,7 @@
     "docs/live-title-receiver-1102.md": "f491a669c2b80f0625be7f7e67f93251b1b9ba621c3733a5ddba33a1c5fe8bd8",
     "docs/multi-reference-isolated-20261102.md": "bde62b04146b8116f1d0f4e9041e6a481f54e8a83de1ae6f2e8d330be4a656b5",
     "docs/multi-reference-picker-1103.md": "bf8618515be8e30f7b9341e26b8aad18701e2465c0f3cf27c161e87c3c697609",
+    "docs/multi-reference-style-only-1103.md": "f0c0a391f6063071848a5609e82bfa2b76663572e1a62a23413cafff76bbf50a",
     "docs/reference-image-filters-1103.md": "68a45b441e2e45c76607916cdbf5ea0178b71e830c630971acddbc0ca0d56c4f",
     "docs/release-1027-caption.md": "a4974e1649399424aa175991496a409e57122a4bfbabfc49d8294ca0865b3997",
     "docs/ui-responsiveness-20261102.md": "c60feca666e8f130d9109b2374d0195282adc41de18d9de8ab645d9d06552252",
@@ -37,7 +38,7 @@
     "image_splitter.py": "115b96c49f45db3b003c554c3a793f445a4d970a64e22569747c2bd532af4fb7",
     "launch_gui.cmd": "56d15c747b3452164783db78d8df15f3d8661f418c9019cf97843d857121d968",
     "launch_gui.py": "cd6aef04429607dcf1b21903f73df7a3948e72ef09348e19f0fd0248223070a0",
-    "multi_reference_mode.py": "d20af0b7d87422e18eea00d77507be89ebc99bf8a1c6a00701c24e882078dd73",
+    "multi_reference_mode.py": "f07d7e329c099bf7cb46271b7823454b589bfb069c024853fb9d6b645471211f",
     "multi_reference_picker.py": "2ebdd855c97f14123487107118d45f8be0e39bba45b8e9a1638b084ffc05f9c7",
     "naturalize_jfif_small_sharp_v10.py": "969f86ac84b91feb56b27195ef364d2ef14c0b352c236ea1e5b6ca827779a72e",
     "picfactory_gui.py": "007eb1df9f46c184a0d475c97e08fd5d816ffa852ddad31642228c29928ee8fb",
@@ -50,7 +51,8 @@
     "tools/export_comic_prompts.py": "331d4dd3cdb01632402e9e4f0e78130e1172bd3c531aa3fa05c1b490387e9178",
     "tools/fixtures/style_v4_contract.json": "22595b8c1de32a96857993e771287f146c7386b8915e50322f2ea247024102c2",
     "tools/test_caption_release.py": "4c25e2987db5b709048a06bc64420af630c7471313f6a734e3f1bde562c6c631",
-    "tools/test_multi_reference_mode.py": "6f8a5af7f5d2546577589054f9031695972f5be6947d70dc1b82508b3086ef0e",
+    "tools/test_multi_reference_content_guard.py": "f12fc61c62910e20834e10ab73e05decca967c1c3283e1a1bb43a51bf5631d04",
+    "tools/test_multi_reference_mode.py": "6457f7db883e38acfefd0c1491083fef782e15abad42ac0ee4727f4c37cc0ce1",
     "tools/test_multi_reference_picker.py": "183b1cace2e9fef49c48524845831fa6cfcf0ba09a440ba804020ed012a96b27",
     "tools/test_reference_image_filters.py": "e41d315e389da1435f2df6e5ca3ec4cb0ff5191251ab661dc160932537243126",
     "tools/test_title_push_refresh.py": "4cac1e4fae3b318e87d42f6f1b811b11ca76239c055040b8485c2562f86ad75e",
@@ -62,5 +64,6 @@
   "fixed_baseline_commit": "089d7a7b1acf990afb7586fa09aae00c2bde16bd",
   "title_receiver_revision": "verified_push_bridge_v3_multi_reference",
   "multi_reference_picker_revision": "checkbox-v1-20261103",
-  "reference_image_filters": "reference-metadata-v1-20261103"
+  "reference_image_filters": "reference-metadata-v1-20261103",
+  "multi_reference_prompt": "style-only-content-boundary-v1-20261103"
 }
