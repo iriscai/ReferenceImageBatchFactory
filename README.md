@@ -63,6 +63,6 @@ python -m PyInstaller --noconfirm --clean PicFactoryGUI.spec
 多参考图模式在账号编辑的参考图字段直接勾选多张图片，无需按Ctrl；显示已选数量。其他模式保持原控件。详见[修复说明](docs/multi-reference-picker-1103.md)。
 
 
-## 多参考图账号筛选
+## 参考图筛选
 
-多参考图配置弹窗支持按分组、标签及名称/ID组合筛选，保留参考图勾选草稿。详见[筛选说明](docs/multi-reference-account-filters-1103.md)。
+多选参考图时，可按参考图库的分组/分类、标签和名称/ID/说明组合检索。标签在参考图管理中维护，筛选不会丢失勾选。详见[参考图筛选说明](docs/reference-image-filters-1103.md)。

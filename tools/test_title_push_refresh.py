@@ -79,7 +79,11 @@ class TitlePushRefreshTests(unittest.TestCase):
         self.assertEqual(self.state['title_library'][-1],expected)
 
     def make_ui(self):
-        root=pg.tk.Tk();root.withdraw();self.addCleanup(root.destroy)
+        root=pg.tk.Tk();root.withdraw()
+        def close_root():
+            for token in root.tk.call('after','info'):root.after_cancel(token)
+            root.destroy()
+        self.addCleanup(close_root)
         app=pg.PicFactoryGUI.__new__(pg.PicFactoryGUI)
         app.root=root;app.main=pg.ttk.Frame(root);app.main.pack();app.state=self.state
         app.current_workspace='title_library';app.save_state=Mock()

@@ -4874,6 +4874,7 @@ class PicFactoryGUI(MultiReferenceModeMixin):
         count_var = tk.StringVar()
         name_var = tk.StringVar()
         detail_category_var = tk.StringVar()
+        detail_tags_var = tk.StringVar()
         enabled_var = tk.BooleanVar(value=True)
         enabled_text_var = tk.StringVar()
         file_info_var = tk.StringVar(value="尚未选择参考图")
@@ -4962,11 +4963,13 @@ class PicFactoryGUI(MultiReferenceModeMixin):
         def refresh_enabled_text():
             enabled_text_var.set("✓ 启用" if bool(enabled_var.get()) else "○ 停用")
 
-        ttk.Checkbutton(detail, textvariable=enabled_text_var, variable=enabled_var, command=refresh_enabled_text, width=8).grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 1))
-        ttk.Label(detail, text="停用后账号管理中不可选择", style="Muted.TLabel").grid(row=8, column=0, columnspan=2, sticky="w", pady=(0, 3))
+        ttk.Label(detail, text="标签（逗号分隔）").grid(row=7, column=0, sticky="w", pady=3, padx=(0, 8))
+        ttk.Entry(detail, textvariable=detail_tags_var).grid(row=7, column=1, sticky="ew", pady=3)
+        ttk.Checkbutton(detail, textvariable=enabled_text_var, variable=enabled_var, command=refresh_enabled_text, width=8).grid(row=8, column=0, columnspan=2, sticky="w", pady=(6, 1))
+        ttk.Label(detail, text="停用后账号管理中不可选择", style="Muted.TLabel").grid(row=9, column=0, columnspan=2, sticky="w", pady=(0, 3))
         refresh_enabled_text()
         actions = ttk.Frame(detail)
-        actions.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        actions.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ttk.Button(actions, text="保存修改", style="Start.TButton", command=lambda: save_detail()).pack(side="left")
         ttk.Button(actions, text="替换图片", command=lambda: replace_image()).pack(side="left", padx=(8, 0))
         ttk.Button(actions, text="打开文件位置", command=lambda: open_location()).pack(side="left", padx=(8, 0))
@@ -4995,6 +4998,7 @@ class PicFactoryGUI(MultiReferenceModeMixin):
             file_info_var.set("尚未选择参考图")
             name_var.set("")
             detail_category_var.set("")
+            detail_tags_var.set("")
             set_text(description_text, "")
             set_text(note_text, "")
             enabled_var.set(True)
@@ -5004,6 +5008,8 @@ class PicFactoryGUI(MultiReferenceModeMixin):
             selection["uuid"] = str(record.get("uuid", ""))
             name_var.set(str(record.get("name", "")))
             detail_category_var.set(str(record.get("category", "")))
+            tags = record.get("tags") or ""
+            detail_tags_var.set("、".join(str(t) for t in tags) if isinstance(tags, list) else str(tags))
             set_text(description_text, record.get("description", ""))
             set_text(note_text, record.get("note", ""))
             enabled_var.set(record.get("enabled", True) is not False)
@@ -5149,6 +5155,9 @@ class PicFactoryGUI(MultiReferenceModeMixin):
             old_name = str(record.get("name", "")).strip()
             record["name"] = name
             record["category"] = detail_category_var.get().strip()
+            tags = detail_tags_var.get().strip()
+            if tags or "tags" in record:
+                record["tags"] = tags
             record["description"] = description_text.get("1.0", "end").strip()
             record["note"] = note_text.get("1.0", "end").strip()
             record["enabled"] = bool(enabled_var.get())
