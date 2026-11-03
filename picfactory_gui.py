@@ -2042,6 +2042,79 @@ def title_record_used(value: object) -> bool:
     return str(value or "").strip().lower() in {"是", "启用", "已用", "使用", "true", "1", "yes", "y", "on"}
 
 
+def title_success_token(work: dict) -> str:
+    """Identify a completed run, independently of the title's status setting."""
+    identity = [str(work.get("uuid", "")), str(work.get("updated_at", ""))]
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def title_consumed_history(state: dict) -> dict[str, str]:
+    """Successful runs since the most recent explicit title reactivation."""
+    ignored_by_key = {}
+    for record in state.get("title_library", []):
+        if not isinstance(record, dict):
+            continue
+        resets = record.get("usage_reset_successes", [])
+        if isinstance(resets, list):
+            ignored_by_key.setdefault(title_consumption_key(record.get("title")), set()).update(
+                token for token in resets if isinstance(token, str)
+            )
+    consumed = {}
+    for work in state.get("generated_works", []):
+        if not isinstance(work, dict) or str(work.get("status", "")).strip() != "成功":
+            continue
+        key = title_consumption_key(work.get("title"))
+        if key and title_success_token(work) not in ignored_by_key.get(key, set()):
+            consumed.setdefault(key, str(work.get("updated_at", "") or "").strip())
+    return consumed
+
+
+def reactivate_title_records(state: dict, selected_uuids) -> None:
+    """An explicit Enable edit/import grants one fresh use of this global title.
+
+    Snapshot only past successes. A later success still consumes all duplicates,
+    including after restart or when runs share the same display timestamp.
+    Never enable unselected rows or remove any successful work history.
+    """
+    records = state.get("title_library", [])
+    selected = {str(identity) for identity in selected_uuids}
+    keys = {
+        title_consumption_key(record.get("title")) for record in records
+        if isinstance(record, dict) and str(record.get("uuid", "")) in selected
+        and str(record.get("status", "")).strip() == "启用"
+    }
+    keys.discard("")
+    consumed = set(title_consumed_history(state))
+    consumed.update(
+        title_consumption_key(record.get("title")) for record in records
+        if isinstance(record, dict) and (title_record_used(record.get("used")) or str(record.get("used_at", "") or "").strip())
+    )
+    keys.intersection_update(consumed)
+    if not keys:
+        return
+    previous = {key: set() for key in keys}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        key = title_consumption_key(record.get("title"))
+        resets = record.get("usage_reset_successes", [])
+        if key in keys and isinstance(resets, list):
+            previous[key].update(token for token in resets if isinstance(token, str))
+    for work in state.get("generated_works", []):
+        if isinstance(work, dict) and str(work.get("status", "")).strip() == "成功":
+            key = title_consumption_key(work.get("title"))
+            if key in keys:
+                previous[key].add(title_success_token(work))
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        key = title_consumption_key(record.get("title"))
+        if key in keys:
+            record["used"] = False
+            record["used_at"] = ""
+            record["usage_reset_successes"] = sorted(previous[key])
+
+
 def normalize_title_consumption(state: dict) -> None:
     """Initialize title-use metadata and absorb historical successful works.
 
@@ -2051,20 +2124,9 @@ def normalize_title_consumption(state: dict) -> None:
     titles = state.get("title_library")
     if not isinstance(titles, list):
         return
-    successful_keys = {
-        title_consumption_key(item.get("title"))
-        for item in state.get("generated_works", [])
-        if isinstance(item, dict) and str(item.get("status", "")).strip() == "成功" and title_consumption_key(item.get("title"))
-    }
+    used_at_by_key = title_consumed_history(state)
     changed = False
-    used_at_by_key = {}
-    for item in state.get("generated_works", []):
-        if not isinstance(item, dict) or str(item.get("status", "")).strip() != "成功":
-            continue
-        key = title_consumption_key(item.get("title"))
-        if key:
-            used_at_by_key.setdefault(key, str(item.get("updated_at", "") or "").strip())
-    consumed_keys = set(successful_keys)
+    consumed_keys = set(used_at_by_key)
     for record in titles:
         if not isinstance(record, dict):
             continue
@@ -6091,6 +6153,8 @@ class PicFactoryGUI(MultiReferenceModeMixin):
                     # record, so keep it at the head of the management list.
                     records.remove(current)
                     records.insert(0, current)
+                if collection_key == "title_library" and str(current.get("status", "")).strip() == "启用":
+                    reactivate_title_records(self.state, [current.get("uuid")])
                 if collection_key == "fixed_style_templates":
                     self.save_state()
                     if not editing or (old_name and old_name == self.style_management_defaults.get("style_name")):
@@ -6191,6 +6255,7 @@ class PicFactoryGUI(MultiReferenceModeMixin):
             new_target_ids = set()
             updated_target_ids = set()
             imported_uuids = []
+            explicit_title_enable_uuids = set()
             for _sheet_name, rows in worksheets:
                 if not rows:
                     continue
@@ -6222,6 +6287,7 @@ class PicFactoryGUI(MultiReferenceModeMixin):
                         continue
                     imported_uuid = str(record.get("uuid", "") or "").strip()
                     imported_updated_at = str(record.get("updated_at", "") or "").strip()
+                    explicit_title_enable = collection_key == "title_library" and str(record.get("status", "")).strip() == "启用"
                     if collection_key == "title_library" and not str(record.get("status", "") or "").strip():
                         record["status"] = "启用"
                     if collection_key in {"wechat_accounts", "article_prompts", "comment_prompts", "storyboard_prompt_rules"}:
@@ -6284,6 +6350,8 @@ class PicFactoryGUI(MultiReferenceModeMixin):
                         skipped += 1
                         continue
                     imported_uuids.append(str(target.get("uuid", "")))
+                    if explicit_title_enable:
+                        explicit_title_enable_uuids.add(str(target.get("uuid", "")))
             if not imported_uuids:
                 messagebox.showerror("导入失败", f"Excel 中没有可导入的{title}记录。")
                 return
@@ -6293,6 +6361,8 @@ class PicFactoryGUI(MultiReferenceModeMixin):
                 return
             self.prepare_undo(f"导入{title}")
             records[:] = working_records
+            if collection_key == "title_library":
+                reactivate_title_records(self.state, explicit_title_enable_uuids)
             self.save_state()
             refresh_table(imported_uuids[0])
             suffix = f"，跳过 {skipped} 条不完整记录" if skipped else ""
@@ -11649,10 +11719,7 @@ class PicFactoryGUI(MultiReferenceModeMixin):
         account_ids = {str(account.get("account_id", "")).strip() for account in accounts}
         with self.account_generation_state_lock:
             works = [work for work in self.state.get("generated_works", []) if isinstance(work, dict)]
-            consumed = {
-                title_consumption_key(work.get("title")) for work in works
-                if str(work.get("status", "")).strip() == "成功"
-            }
+            consumed = set(title_consumed_history(self.state))
             consumed.update(
                 title_consumption_key(item.get("title"))
                 for item in self.state.get("title_library", []) if isinstance(item, dict)

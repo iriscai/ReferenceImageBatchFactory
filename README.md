@@ -71,3 +71,8 @@ python -m PyInstaller --noconfirm --clean PicFactoryGUI.spec
 ## 多参考图仅参考画风
 
 本模式的全部参考图只传递画风，人物、事件、肖像和文字以新正文与分镜为依据，不启用形象图锁定。详见[更新规则](docs/multi-reference-style-only-1103.md)。其他模式不变。
+
+
+## 标题重新启用
+
+编辑状态或 Excel 明确填写“启用”可重新使用已消费标题，历史作品保留，再次成功后仍自动停用。空状态及取消导入不会重置消费。详见[标题状态说明](docs/title-status-import-1103.md)。

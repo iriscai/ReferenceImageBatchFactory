@@ -1,5 +1,5 @@
 {
-  "version": "1103_多参考图纯画风与内容隔离修复",
+  "version": "1103_标题状态编辑与Excel导入修复",
   "source_version": "1023强参考基线 + 1026/1027编排与文字覆盖 + v5参考图旁白自适应",
   "base_commit": "9f492f5ff5e2fba6c6a245a312a6e7cd10d0c30d",
   "reference_prompt_version": "comic-semantic-strong-reference-candidate-v5",
@@ -10,8 +10,8 @@
     ".gitignore": "cc61682227f9bd03f167c75705dfa779492aadce5f02f3701eda596c0d4ff91a",
     "AGENTS.md": "411a2993b8ba3ae4740776242c0f240d976236e63b692a32df6de99ea04dc261",
     "PicFactoryGUI.spec": "d21f38097a40052ab1105947a53a75f6e019fbd7bcd7135fada1fe2787f29eab",
-    "README.md": "4fe524c12c6bc408d3f63a9eea46be13c541a275f3e249e5fe4af18f38ec813e",
-    "VERSION": "34c22149b7eb35c10634617efe0b235216594dbd669ffcc7cfce311c44d72365",
+    "README.md": "ada17a2ac0a29b3c438be501669505f968e93e81ee9a33e375d94455cdc0c2a8",
+    "VERSION": "ca84857457a108564e2db445b2f63c68824b1d04acf3223dcee62f03abf63d63",
     "assets/continuous_style_icon.ico": "5455726a8d8cf5f0df410d1bf71c17cf530b599dc684734bacaf483e3b44668c",
     "assets/reference_batch_icon.ico": "0c011acbd58db29b9100d4a76788ec14371f51b23fae19c59436227dda1d9d8d",
     "assets/reference_batch_icon_preview.png": "ba63d959ccd4145e18c51ddceb3eb77cd99e3fd034e446ff855d9783ffb5d742",
@@ -29,6 +29,7 @@
     "docs/multi-reference-style-only-1103.md": "f0c0a391f6063071848a5609e82bfa2b76663572e1a62a23413cafff76bbf50a",
     "docs/reference-image-filters-1103.md": "68a45b441e2e45c76607916cdbf5ea0178b71e830c630971acddbc0ca0d56c4f",
     "docs/release-1027-caption.md": "a4974e1649399424aa175991496a409e57122a4bfbabfc49d8294ca0865b3997",
+    "docs/title-status-import-1103.md": "3313fc7089d88f143c5c99eeb4d010ad293dff1a3449669cc95dd8b24e9997a3",
     "docs/ui-responsiveness-20261102.md": "c60feca666e8f130d9109b2374d0195282adc41de18d9de8ab645d9d06552252",
     "image_clarity.py": "a24fc61f717d341d5be54e236a121f188835bd490120807cca56291235ce88e2",
     "image_refine/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -41,7 +42,7 @@
     "multi_reference_mode.py": "f07d7e329c099bf7cb46271b7823454b589bfb069c024853fb9d6b645471211f",
     "multi_reference_picker.py": "2ebdd855c97f14123487107118d45f8be0e39bba45b8e9a1638b084ffc05f9c7",
     "naturalize_jfif_small_sharp_v10.py": "969f86ac84b91feb56b27195ef364d2ef14c0b352c236ea1e5b6ca827779a72e",
-    "picfactory_gui.py": "007eb1df9f46c184a0d475c97e08fd5d816ffa852ddad31642228c29928ee8fb",
+    "picfactory_gui.py": "5be884f273312df3393a5dde68f4aa72e3814b18d716137c982cd6d45bf1a10d",
     "reference_prompt_baseline.py": "7006d4d93478b0ad22d314e6c1bd9c5da0f74da16a68878534b60d772f1e0654",
     "requirements.txt": "13b6e192a4f40f3d88574ae1864206e6a7c61d79f1a57d8433f50947b2f851ed",
     "six_grid_style_prompt.py": "19adb59d080028d3762e230eb11bf9ed118b120804ca6bd4952ac9b21fa4b6f0",
@@ -57,6 +58,7 @@
     "tools/test_reference_image_filters.py": "e41d315e389da1435f2df6e5ca3ec4cb0ff5191251ab661dc160932537243126",
     "tools/test_title_push_refresh.py": "4cac1e4fae3b318e87d42f6f1b811b11ca76239c055040b8485c2562f86ad75e",
     "tools/test_title_receiver.py": "163638befc2f20621701cd0a3c39d674d23ff2122a4846d1535e4375055b9402",
+    "tools/test_title_status_edit_import.py": "8c9dffbf85c966fa11d4bf63e7550ddcd7fc2731beda2cec903abcb6e723c0a1",
     "tools/test_ui_responsiveness.py": "4200b1231190224010d2cbc02cbb312b339d309acc6864998b1a6b6b3b9203f5"
   },
   "ui_revision": "20261102-canvas-cards",
@@ -65,5 +67,6 @@
   "title_receiver_revision": "verified_push_bridge_v3_multi_reference",
   "multi_reference_picker_revision": "checkbox-v1-20261103",
   "reference_image_filters": "reference-metadata-v1-20261103",
-  "multi_reference_prompt": "style-only-content-boundary-v1-20261103"
+  "multi_reference_prompt": "style-only-content-boundary-v1-20261103",
+  "title_status_import": "explicit-reactivation-v1-20261103"
 }
