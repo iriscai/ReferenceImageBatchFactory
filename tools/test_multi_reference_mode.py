@@ -228,8 +228,9 @@ class MultiReferenceUITests(unittest.TestCase):
 
     def test_hidden_search_selection_survives_save_and_other_account_is_unchanged(self):
         before_old = copy.deepcopy(self.old)
-        entries = [w for w in self.widgets(self.dialog) if isinstance(w, pg.ttk.Entry) and not isinstance(w, pg.ttk.Combobox)]
-        entries[0].insert(0, '没有匹配项')
+        from multi_reference_picker import ReferenceChecklist
+        background = next(w for w in self.widgets(self.dialog) if isinstance(w, ReferenceChecklist))
+        background.search.set('没有匹配项')
         time.sleep(0.17)
         self.app.root.update()
         trees = [w for w in self.widgets(self.dialog) if isinstance(w, pg.ttk.Treeview)]

@@ -1,9 +1,31 @@
 """Checkbox selection used exclusively by the multi-reference image mode."""
 import copy
+import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 MODE_MULTI = '多参考图生图'
+
+
+def filter_multi_reference_accounts(accounts, group='全部分组', tag='全部标签', keyword=''):
+    """Combine exact group/tag filters with case-insensitive account name/ID search."""
+    keyword = str(keyword or '').strip().casefold()
+    result = []
+    for account in accounts:
+        current_group = str(account.get('group') or '').strip()
+        if group == '未分组' and current_group:
+            continue
+        if group not in ('', '全部分组', '未分组') and current_group != group:
+            continue
+        tags = {p.strip() for p in re.split(r'[,，、;；\s]+', str(account.get('tags') or '')) if p.strip()}
+        if tag == '未标记' and tags:
+            continue
+        if tag not in ('', '全部标签', '未标记') and tag not in tags:
+            continue
+        if keyword and not any(keyword in str(account.get(k) or '').casefold() for k in ('name', 'account_id')):
+            continue
+        result.append(account)
+    return result
 
 
 class ReferenceChecklist(ttk.Frame):
@@ -128,19 +150,65 @@ class MultiReferencePickerMixin:
         dialog = tk.Toplevel(self.root); dialog.title('多参考图配置'); dialog.geometry('1120x760')
         dialog.minsize(820,560); dialog.transient(self.root); dialog.grab_set()
         body = ttk.Frame(dialog,padding=14); body.pack(fill='both',expand=True)
+        filters = ttk.LabelFrame(body,text='筛选账号',padding=8); filters.pack(fill='x',pady=(0,10))
+        filters.columnconfigure(2,weight=1)
+        group_var = tk.StringVar(value='全部分组'); tag_var = tk.StringVar(value='全部标签'); query_var = tk.StringVar()
+        ttk.Label(filters,text='分组').grid(row=0,column=0,sticky='w')
+        ttk.Label(filters,text='标签').grid(row=0,column=1,sticky='w')
+        ttk.Label(filters,text='账号检索（名称 / ID）').grid(row=0,column=2,sticky='w')
+        groups = sorted({str(a.get('group') or '').strip() for a in accounts if str(a.get('group') or '').strip()})
+        tags = sorted({p.strip() for a in accounts for p in re.split(r'[,，、;；\s]+',str(a.get('tags') or '')) if p.strip()})
+        group_combo = ttk.Combobox(filters,textvariable=group_var,values=['全部分组','未分组',*groups],state='readonly',width=22)
+        group_combo.grid(row=1,column=0,sticky='ew',padx=(0,10))
+        tag_combo = ttk.Combobox(filters,textvariable=tag_var,values=['全部标签','未标记',*tags],state='readonly',width=22)
+        tag_combo.grid(row=1,column=1,sticky='ew',padx=(0,10))
+        ttk.Entry(filters,textvariable=query_var).grid(row=1,column=2,sticky='ew',padx=(0,10))
         ttk.Label(body,text='账号（保存后将此账号切换为多参考图生图）').pack(anchor='w')
         combo = ttk.Combobox(body,state='readonly',values=[f"{a.get('name','')}  [{a.get('account_id','')}]" for a in accounts])
         combo.pack(fill='x',pady=(4,10))
+        match_count = tk.StringVar(); ttk.Label(body,textvariable=match_count).pack(anchor='w',pady=(0,4))
         editors,size = self._multi_reference_picker_body(body,{})
+        visible = list(accounts); current = {'account':None}; drafts = {}; timer = {'id':None}
+        def identity(account):
+            return str(account.get('uuid') or account.get('account_id') or id(account))
+        def stash():
+            account = current['account']
+            if account is not None:
+                drafts[identity(account)] = self._multi_reference_config_from_picker(account.get('multi_reference_config'),editors,size)
         def load(_event=None):
-            if combo.current()<0:return
-            config = accounts[combo.current()].get('multi_reference_config') or {}
+            stash()
+            index = combo.current()
+            account = visible[index] if 0<=index<len(visible) else None
+            current['account'] = account
+            config = (drafts.get(identity(account),account.get('multi_reference_config') or {}) if account is not None else {})
             for key,picker in editors.items():
                 picker.search.set(''); picker.set_names(self.normalize_multi_reference_names(config.get(key)))
             size.set(str(config.get('image_size') or ''))
+            save_button.configure(state='normal' if account is not None else 'disabled')
+        def refresh_accounts():
+            if timer['id'] is not None:
+                dialog.after_cancel(timer['id']);timer['id']=None
+            stash(); selected = current['account']
+            visible[:] = filter_multi_reference_accounts(accounts,group_var.get(),tag_var.get(),query_var.get())
+            combo.configure(values=[f"{a.get('name','')}  [{a.get('account_id','')}]" for a in visible])
+            match_count.set(f'符合筛选 {len(visible)} / {len(accounts)} 个账号')
+            index = next((i for i,a in enumerate(visible) if a is selected),-1)
+            if index>=0:
+                combo.current(index)
+            else:
+                combo.set('');load()
+        def queue_search(*_):
+            if timer['id'] is not None:dialog.after_cancel(timer['id'])
+            timer['id']=dialog.after(150,refresh_accounts)
+        def reset_filters():
+            group_var.set('全部分组');tag_var.set('全部标签');query_var.set('');refresh_accounts()
+        def cancel_filter_timer(event):
+            if event.widget is dialog and timer['id'] is not None:
+                dialog.after_cancel(timer['id']);timer['id']=None
         def save():
-            if combo.current()<0:return
-            account = accounts[combo.current()]; updated = copy.deepcopy(account)
+            account = current['account']
+            if account is None:return
+            updated = copy.deepcopy(account)
             updated['generation_mode'] = MODE_MULTI
             updated['multi_reference_config'] = self._multi_reference_config_from_picker(account.get('multi_reference_config'),editors,size)
             updated['updated_at'] = self.record_updated_at()
@@ -150,9 +218,15 @@ class MultiReferencePickerMixin:
                 messagebox.showerror('配置未保存',str(exc),parent=dialog); return
             account.clear(); account.update(updated); dialog.destroy(); self.refresh_all()
         actions = ttk.Frame(body); actions.pack(fill='x',pady=(14,0))
-        ttk.Button(actions,text='保存此账号',command=save).pack(side='right')
+        save_button = ttk.Button(actions,text='保存此账号',command=save);save_button.pack(side='right')
         ttk.Button(actions,text='取消',command=dialog.destroy).pack(side='right',padx=8)
         combo.bind('<<ComboboxSelected>>',load)
+        group_combo.bind('<<ComboboxSelected>>',lambda _e:refresh_accounts())
+        tag_combo.bind('<<ComboboxSelected>>',lambda _e:refresh_accounts())
+        query_var.trace_add('write',queue_search)
+        ttk.Button(filters,text='重置筛选',command=reset_filters).grid(row=1,column=3)
+        dialog.bind('<Destroy>',cancel_filter_timer,add='+')
+        match_count.set(f'符合筛选 {len(accounts)} / {len(accounts)} 个账号')
         combo.current(next((i for i,a in enumerate(accounts) if a.get('generation_mode')==MODE_MULTI),0)); load()
 
     def open_multi_reference_picker(self, parent, initial, on_save):
