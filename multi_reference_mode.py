@@ -1,4 +1,5 @@
 """Isolated multi-reference mode. Existing image modes never call this chain."""
+from multi_reference_picker import MultiReferencePickerMixin
 import concurrent.futures
 import copy
 import json
@@ -17,7 +18,7 @@ MULTI_REFERENCE_DEFAULT_SCENE = "根据本张文案安排相关人物、动作�
 GRID_LAYOUT_SINGLE = "单幅"
 
 
-class MultiReferenceModeMixin:
+class MultiReferenceModeMixin(MultiReferencePickerMixin):
     def multi_reference_binding(self, account: dict | None) -> dict:
         """Only this explicit mode reads multi_reference_config."""
         account = account if isinstance(account, dict) else {}
@@ -72,131 +73,7 @@ class MultiReferenceModeMixin:
         ttk.Label(bar, text="独立配置背景与画风图、人物形象图；仅多参考图生图模式读取。 ").pack(side="left", padx=8)
 
     def open_multi_reference_config(self):
-        if getattr(self, "account_generation_running", False):
-            messagebox.showinfo("提示", "请等待当前生图任务结束后再修改多参考图配置。", parent=self.root)
-            return
-        accounts = [a for a in self.state.get("wechat_accounts", []) if isinstance(a, dict)]
-        if not accounts:
-            return
-        dialog = tk.Toplevel(self.root)
-        dialog.title("多参考图配置")
-        dialog.geometry("1120x740")
-        dialog.minsize(820, 560)
-        dialog.transient(self.root)
-        dialog.grab_set()
-        body = ttk.Frame(dialog, padding=14)
-        body.pack(fill="both", expand=True)
-        names = [f"{a.get('name', '')}  [{a.get('account_id', '')}]" for a in accounts]
-        ttk.Label(body, text="账号（保存后将此账号切换为多参考图生图）").pack(anchor="w")
-        account_var = tk.StringVar()
-        combo = ttk.Combobox(body, textvariable=account_var, values=names, state="readonly")
-        combo.pack(fill="x", pady=(4, 10))
-        ttk.Label(body, text="Ctrl/Shift 可多选。每张生成图均上传完整参考图；首张背景图决定默认尺寸。").pack(anchor="w")
-        columns = ttk.Frame(body)
-        columns.pack(fill="both", expand=True, pady=10)
-        columns.columnconfigure(0, weight=1)
-        columns.columnconfigure(1, weight=1)
-        columns.rowconfigure(0, weight=1)
-        refs = sorted(str(r.get("name", "")).strip() for r in self.state.get("reference_images", [])
-                      if isinstance(r, dict) and str(r.get("name", "")).strip() and r.get("enabled", True) is not False)
-        editors = {}
-        for column, (key, title) in enumerate([("background_names", "背景与画风参考图"), ("character_names", "人物形象参考图")]):
-            frame = ttk.LabelFrame(columns, text=title, padding=8)
-            frame.grid(row=0, column=column, sticky="nsew", padx=(0, 8) if column == 0 else (8, 0))
-            search = tk.StringVar()
-            ttk.Entry(frame, textvariable=search).pack(fill="x", pady=(0, 6))
-            tree_frame = ttk.Frame(frame)
-            tree_frame.pack(fill="both", expand=True)
-            tree = ttk.Treeview(tree_frame, show="tree", selectmode="extended")
-            scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
-            tree.configure(yscrollcommand=scroll.set)
-            scroll.pack(side="right", fill="y")
-            tree.pack(side="left", fill="both", expand=True)
-            count = tk.StringVar()
-            ttk.Label(frame, textvariable=count).pack(anchor="w", pady=(6, 0))
-            state = {"selected": [], "visible": {}, "search": search, "tree": tree, "count": count, "timer": None}
-            editors[key] = state
-
-            def refresh(editor=state):
-                if not dialog.winfo_exists():
-                    return
-                selected = set(editor["selected"])
-                keyword = editor["search"].get().strip().lower()
-                visible = [name for name in refs if keyword in name.lower()]
-                widget = editor["tree"]
-                widget.delete(*widget.get_children())
-                editor["visible"] = {str(i): name for i, name in enumerate(visible)}
-                for item_id, name in editor["visible"].items():
-                    widget.insert("", "end", iid=item_id, text=name)
-                chosen = [item_id for item_id, name in editor["visible"].items() if name in selected]
-                if chosen:
-                    widget.selection_set(chosen)
-                editor["count"].set(f"已选 {len(selected)} 张")
-
-            def on_selection(_event=None, editor=state):
-                visible = set(editor["visible"].values())
-                hidden = [n for n in editor["selected"] if n not in visible]
-                chosen = [editor["visible"][i] for i in editor["tree"].selection() if i in editor["visible"]]
-                editor["selected"] = hidden + chosen
-                editor["count"].set(f"已选 {len(editor['selected'])} 张")
-
-            def queue(*_args, editor=state, callback=refresh):
-                if editor["timer"]:
-                    dialog.after_cancel(editor["timer"])
-                editor["timer"] = dialog.after(150, callback)
-
-            state["refresh"] = refresh
-            tree.bind("<<TreeviewSelect>>", on_selection)
-            search.trace_add("write", queue)
-        size_var = tk.StringVar()
-        size_row = ttk.Frame(body)
-        size_row.pack(fill="x")
-        ttk.Label(size_row, text="本账号尺寸（留空跟随首张背景图）：").pack(side="left")
-        ttk.Entry(size_row, textvariable=size_var, width=20).pack(side="left", padx=6)
-        ttk.Label(size_row, text="例如 1024x1536").pack(side="left")
-
-        def load(_event=None):
-            index = combo.current()
-            if index < 0:
-                return
-            config = accounts[index].get("multi_reference_config") or {}
-            for key, editor in editors.items():
-                editor["selected"] = self.normalize_multi_reference_names(config.get(key))
-                editor["search"].set("")
-                editor["refresh"]()
-            size_var.set(str(config.get("image_size") or ""))
-
-        def save():
-            index = combo.current()
-            if index < 0:
-                return
-            account = accounts[index]
-            updated = copy.deepcopy(account)
-            config = dict(updated.get("multi_reference_config") or {})
-            config.update({key: list(editor["selected"]) for key, editor in editors.items()})
-            config.update({"version": 1, "image_size": size_var.get().strip()})
-            updated["multi_reference_config"] = config
-            updated["generation_mode"] = GENERATION_MODE_MULTI_REFERENCE
-            updated["updated_at"] = self.record_updated_at()
-            try:
-                self.multi_reference_binding(updated)
-                self.multi_reference_save_account(updated)
-            except Exception as exc:
-                messagebox.showerror("配置未保存", str(exc), parent=dialog)
-                return
-            account.clear()
-            account.update(updated)
-            dialog.destroy()
-            self.refresh_all()
-
-        actions = ttk.Frame(body)
-        actions.pack(fill="x", pady=(14, 0))
-        ttk.Button(actions, text="保存此账号", command=save).pack(side="right")
-        ttk.Button(actions, text="取消", command=dialog.destroy).pack(side="right", padx=8)
-        combo.bind("<<ComboboxSelected>>", load)
-        first = next((i for i, a in enumerate(accounts) if a.get("generation_mode") == GENERATION_MODE_MULTI_REFERENCE), 0)
-        combo.current(first)
-        load()
+        return self.open_multi_reference_accounts_window()
 
     def normalize_multi_reference_names(self, value) -> list[str]:
         """多参考图生图的参考图名单。库里不区分类型，账号只保存参考图管理中的名称。"""

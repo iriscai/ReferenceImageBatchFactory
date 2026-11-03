@@ -56,3 +56,8 @@ python -m PyInstaller --noconfirm --clean PicFactoryGUI.spec
 ## 漫流标题实时接收
 
 漫流推送后自动接收并同步当前标题库，保留原生图模式与账号配置。协议、去重、回执和验证见 [接收说明](docs/live-title-receiver-1102.md)。项目发布维护约定见 [AGENTS.md](AGENTS.md)。
+
+
+## 多参考图勾选修复
+
+多参考图模式在账号编辑的参考图字段直接勾选多张图片，无需按Ctrl；显示已选数量。其他模式保持原控件。详见[修复说明](docs/multi-reference-picker-1103.md)。

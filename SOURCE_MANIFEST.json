@@ -1,5 +1,5 @@
 {
-  "version": "1027_六宫格参考图+画风+文案框优化完整版本 · 多参考图1102 · 漫流实时接收v1",
+  "version": "1103_多参考图勾选修复（保留1102完整功能）",
   "source_version": "1023强参考基线 + 1026/1027编排与文字覆盖 + v5参考图旁白自适应",
   "base_commit": "9f492f5ff5e2fba6c6a245a312a6e7cd10d0c30d",
   "reference_prompt_version": "comic-semantic-strong-reference-candidate-v5",
@@ -10,8 +10,8 @@
     ".gitignore": "cc61682227f9bd03f167c75705dfa779492aadce5f02f3701eda596c0d4ff91a",
     "AGENTS.md": "411a2993b8ba3ae4740776242c0f240d976236e63b692a32df6de99ea04dc261",
     "PicFactoryGUI.spec": "d21f38097a40052ab1105947a53a75f6e019fbd7bcd7135fada1fe2787f29eab",
-    "README.md": "88684be18f5d85df5372e19b470e5ec55f11b4aa6a33d07f3a93567b4e02c3c4",
-    "VERSION": "3b74c463c5bed25e88b5fe3ab0d729b8f3d06ea7d867df61a430d4d4e31ede0f",
+    "README.md": "be84c83a0ec89b4f8b667409adb90c7430888a7bdd5762a929b37c9717fae439",
+    "VERSION": "be8939ef41f0c1b23a0d7bdb3c29c775996ae01172222ce6a9bb39681e1fecdd",
     "assets/continuous_style_icon.ico": "5455726a8d8cf5f0df410d1bf71c17cf530b599dc684734bacaf483e3b44668c",
     "assets/reference_batch_icon.ico": "0c011acbd58db29b9100d4a76788ec14371f51b23fae19c59436227dda1d9d8d",
     "assets/reference_batch_icon_preview.png": "ba63d959ccd4145e18c51ddceb3eb77cd99e3fd034e446ff855d9783ffb5d742",
@@ -25,6 +25,7 @@
     "docs/README.1023-original.md": "78bf0392d086dcf68c49785108abd463436da42da28239a5a5a45f36dc2b3640",
     "docs/live-title-receiver-1102.md": "f491a669c2b80f0625be7f7e67f93251b1b9ba621c3733a5ddba33a1c5fe8bd8",
     "docs/multi-reference-isolated-20261102.md": "bde62b04146b8116f1d0f4e9041e6a481f54e8a83de1ae6f2e8d330be4a656b5",
+    "docs/multi-reference-picker-1103.md": "bf8618515be8e30f7b9341e26b8aad18701e2465c0f3cf27c161e87c3c697609",
     "docs/release-1027-caption.md": "a4974e1649399424aa175991496a409e57122a4bfbabfc49d8294ca0865b3997",
     "docs/ui-responsiveness-20261102.md": "c60feca666e8f130d9109b2374d0195282adc41de18d9de8ab645d9d06552252",
     "image_clarity.py": "a24fc61f717d341d5be54e236a121f188835bd490120807cca56291235ce88e2",
@@ -35,9 +36,10 @@
     "image_splitter.py": "115b96c49f45db3b003c554c3a793f445a4d970a64e22569747c2bd532af4fb7",
     "launch_gui.cmd": "56d15c747b3452164783db78d8df15f3d8661f418c9019cf97843d857121d968",
     "launch_gui.py": "cd6aef04429607dcf1b21903f73df7a3948e72ef09348e19f0fd0248223070a0",
-    "multi_reference_mode.py": "08162822ad7a3ae5733a8761503e19eb8de31c27d27237a46a7f062c19cd05eb",
+    "multi_reference_mode.py": "d20af0b7d87422e18eea00d77507be89ebc99bf8a1c6a00701c24e882078dd73",
+    "multi_reference_picker.py": "602496ca6f6e0f9f33b47598fc73aa04aa6bd169e373fe37f5a24d3434994227",
     "naturalize_jfif_small_sharp_v10.py": "969f86ac84b91feb56b27195ef364d2ef14c0b352c236ea1e5b6ca827779a72e",
-    "picfactory_gui.py": "99ca4df871e01dd2a80e7d512db50c3e2b71011cccc74130719c338bc31f6626",
+    "picfactory_gui.py": "54b31a171e93426490fdf413767528748f890cc1bcb503e85a250cb0d470a63f",
     "reference_prompt_baseline.py": "7006d4d93478b0ad22d314e6c1bd9c5da0f74da16a68878534b60d772f1e0654",
     "requirements.txt": "13b6e192a4f40f3d88574ae1864206e6a7c61d79f1a57d8433f50947b2f851ed",
     "six_grid_style_prompt.py": "19adb59d080028d3762e230eb11bf9ed118b120804ca6bd4952ac9b21fa4b6f0",
@@ -48,6 +50,7 @@
     "tools/fixtures/style_v4_contract.json": "22595b8c1de32a96857993e771287f146c7386b8915e50322f2ea247024102c2",
     "tools/test_caption_release.py": "4c25e2987db5b709048a06bc64420af630c7471313f6a734e3f1bde562c6c631",
     "tools/test_multi_reference_mode.py": "63e4f3a3d0ec4116554ce11acdf2b573f40634950a7b646136868324038d4e54",
+    "tools/test_multi_reference_picker.py": "183b1cace2e9fef49c48524845831fa6cfcf0ba09a440ba804020ed012a96b27",
     "tools/test_title_push_refresh.py": "9fb6d51fb141cf38596b6bea63c140b6845a45adbfd98f0d17df3347b7169abc",
     "tools/test_title_receiver.py": "163638befc2f20621701cd0a3c39d674d23ff2122a4846d1535e4375055b9402",
     "tools/test_ui_responsiveness.py": "4200b1231190224010d2cbc02cbb312b339d309acc6864998b1a6b6b3b9203f5"
@@ -55,5 +58,6 @@
   "ui_revision": "20261102-canvas-cards",
   "multi_reference_extension": "isolated-v1-20261102",
   "fixed_baseline_commit": "089d7a7b1acf990afb7586fa09aae00c2bde16bd",
-  "title_receiver_revision": "verified_push_bridge_v3_multi_reference"
+  "title_receiver_revision": "verified_push_bridge_v3_multi_reference",
+  "multi_reference_picker_revision": "checkbox-v1-20261103"
 }

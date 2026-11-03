@@ -6040,10 +6040,20 @@ class PicFactoryGUI(MultiReferenceModeMixin):
                     value = current.get(key, default() if callable(default) else default)
                 set_value(field, value)
 
+            if collection_key == "wechat_accounts":
+                self.install_multi_reference_account_editor(dialog, variables, widgets, current)
+
             actions = ttk.Frame(body)
             actions.grid(row=len(fields), column=0, columnspan=2, sticky="ew", pady=(16, 0))
 
             def save_dialog():
+                multi_config = None
+                if collection_key == "wechat_accounts" and "generation_mode" in variables:
+                    try:
+                        multi_config = self.collect_multi_reference_account_editor(dialog, variables["generation_mode"].get(), current)
+                    except RuntimeError as exc:
+                        messagebox.showerror("配置未保存", str(exc), parent=dialog)
+                        return
                 old_name = str(editing.get("name", "")) if editing else ""
                 old_title = str(editing.get("title", "")) if editing and collection_key == "title_library" else ""
                 for field in fields:
@@ -6052,6 +6062,8 @@ class PicFactoryGUI(MultiReferenceModeMixin):
                         messagebox.showinfo("提示", f"{field['label']}不能为空。", parent=dialog)
                         return
                     current[field["key"]] = value
+                if multi_config is not None:
+                    current["multi_reference_config"] = multi_config
                 if collection_key == "title_library" and editing and title_consumption_key(old_title) != title_consumption_key(current.get("title")):
                     # Editing a consumed row into a new title creates a fresh
                     # title resource; do not carry the old row's consumption.
